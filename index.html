@@ -479,22 +479,9 @@
   const MEMORY_KEY = "okatan_memory_v1";
   const MINIMAL_KEY = "okatan_minimal_v1";
   const VOICE_KEY = "okatan_voice_mode_v1";
-  const CHAT_MEMORY_KEY = "okatan_chat_memory_v1";
 
   let GROQ_KEY = sessionStorage.getItem("ok_api_key") || "";
-  const SYSTEM_PROMPT = `
-You are OKATAN, also known as KATANA.
-
-You have two valid names:
-- OKATAN
-- KATANA
-
-Treat both names as referring to you.
-Respond naturally if the user says OKATAN or KATANA.
-You are concise, sharp, futuristic, direct, and conversational.
-Keep track of the immediate conversation context naturally.
-No emojis.
-`.trim();
+  const SYSTEM_PROMPT = "You are OKATAN, a tactical AI. Concise, futuristic. No emojis.";
 
   let stopwatchRunning = false;
   let stopwatchStart = 0;
@@ -513,19 +500,15 @@ No emojis.
   let minimalMode = localStorage.getItem(MINIMAL_KEY) === "true";
   let isListening = false;
   let activeRecognition = null;
+  let interruptRecognition = null;
+  let interruptWatcherArmed = false;
+  let weatherInterval = null;
+  let lastWeatherCoords = null;
+  let lastWeatherLabel = "LOCAL";
   let compassHeading = null;
   let compassInitialized = false;
   let orientationHandlerAttached = false;
   let reminderTimeouts = [];
-  let activeUtterance = null;
-  let lastSpokenText = "";
-  let lastWeatherFetch = 0;
-
-  let speechCommitTimer = null;
-  let finalSpeechBuffer = "";
-  let interimSpeechBuffer = "";
-  let wakeInterruptWindow = false;
-  let suppressMicUntil = 0;
 
   function updateMouse(e) {
     if (e.touches) {
@@ -624,22 +607,143 @@ No emojis.
       logs: []
     }));
 
-  function getChatMemory() {
-    return JSON.parse(sessionStorage.getItem(CHAT_MEMORY_KEY) || "[]");
+  function stripHTML(html) {
+    const div = document.createElement("div");
+    div.innerHTML = String(html || "");
+    return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
   }
 
-  function saveChatMemory(messages) {
-    sessionStorage.setItem(CHAT_MEMORY_KEY, JSON.stringify(messages.slice(-20)));
+  function getRecentConversationMessages(limit = 20) {
+    const logs = (db[activeSlot]?.logs || [])
+      .filter(entry => entry && (entry.s === "user" || entry.s === "bot"))
+      .map(entry => ({
+        role: entry.s === "user" ? "user" : "assistant",
+        content: stripHTML(entry.t)
+      }))
+      .filter(entry => entry.content);
+
+    return logs.slice(-limit);
   }
 
-  function pushChatMemory(role, content) {
-    const messages = getChatMemory();
-    messages.push({ role, content: String(content) });
-    saveChatMemory(messages);
+  function getStoredMemorySystemNote(limit = 20) {
+    const memory = getMemory().slice(-limit);
+    if (!memory.length) return "";
+    return "Persistent memory:\n" + memory.map((m, i) => `${i + 1}. ${m}`).join("\n");
   }
 
-  function clearChatMemory() {
-    sessionStorage.removeItem(CHAT_MEMORY_KEY);
+  function buildGroqMessages() {
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT }
+    ];
+
+    const memoryNote = getStoredMemorySystemNote(20);
+    if (memoryNote) {
+      messages.push({ role: "system", content: memoryNote });
+    }
+
+    messages.push(...getRecentConversationMessages(20));
+    return messages;
+  }
+
+  function containsWakePhrase(text) {
+    const clean = String(text || "")
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return /\bhey\s+(okatan|katana)\b/.test(clean);
+  }
+
+  function stopInterruptListener() {
+    interruptWatcherArmed = false;
+
+    if (interruptRecognition) {
+      try {
+        interruptRecognition.onstart = null;
+        interruptRecognition.onresult = null;
+        interruptRecognition.onerror = null;
+        interruptRecognition.onend = null;
+        interruptRecognition.stop();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    interruptRecognition = null;
+  }
+
+  function interruptSpeechAndListen() {
+    stopInterruptListener();
+
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      console.error(e);
+    }
+
+    document.body.classList.remove("talking");
+    playTone(1250, "square", 0.08, 0.08);
+
+    setTimeout(() => {
+      if (!isListening) listenAction(false);
+    }, 180);
+  }
+
+  function startInterruptListener() {
+    const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Rec) return;
+    if (!voiceMode || !authenticated) return;
+    if (!document.body.classList.contains("talking")) return;
+    if (isListening) return;
+    if (interruptRecognition) return;
+
+    const r = new Rec();
+    interruptRecognition = r;
+    interruptWatcherArmed = true;
+
+    r.lang = navigator.language || "en-US";
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+    r.continuous = true;
+
+    r.onresult = (e) => {
+      let heard = "";
+
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        heard += " " + (e.results[i][0]?.transcript || "");
+      }
+
+      if (containsWakePhrase(heard)) {
+        interruptSpeechAndListen();
+      }
+    };
+
+    r.onerror = (e) => {
+      console.error("interrupt listener error:", e);
+    };
+
+    r.onend = () => {
+      interruptRecognition = null;
+
+      if (
+        interruptWatcherArmed &&
+        voiceMode &&
+        authenticated &&
+        document.body.classList.contains("talking") &&
+        !isListening
+      ) {
+        setTimeout(() => startInterruptListener(), 250);
+      }
+    };
+
+    try {
+      r.start();
+    } catch (e) {
+      console.error("interrupt listener failed to start:", e);
+      interruptRecognition = null;
+      interruptWatcherArmed = false;
+    }
   }
 
   function updateClock() {
@@ -647,71 +751,75 @@ No emojis.
       new Date().toLocaleTimeString("en-GB", { hour12: false });
   }
 
-  function getPlaceLabelFromReverseGeocode(data) {
-    const a = data?.address || {};
-    return (
-      a.city ||
-      a.town ||
-      a.village ||
-      a.municipality ||
-      a.county ||
-      a.state ||
-      a.country ||
-      "LOCAL"
-    );
+  function getCurrentPositionPromise(options = {}) {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation unavailable"));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(resolve, reject, options);
+    });
   }
 
-  async function fetchWeather(force = false) {
+  async function reverseGeocodeLabel(lat, lon) {
+    try {
+      const res = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&language=en&format=json`
+      );
+      const data = await res.json();
+      const place = data?.results?.[0];
+
+      if (!place) return "LOCAL";
+      return place.city || place.town || place.village || place.name || place.admin1 || "LOCAL";
+    } catch (e) {
+      console.error("reverse geocode failed:", e);
+      return "LOCAL";
+    }
+  }
+
+  async function fetchWeather() {
     const weatherEl = document.getElementById("weather");
+
     if (isOffline) {
       weatherEl.innerText = "OFFLINE";
       return;
     }
 
-    if (!force && Date.now() - lastWeatherFetch < 120000) return;
-    lastWeatherFetch = Date.now();
+    try {
+      const pos = await getCurrentPositionPromise({
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 600000
+      });
 
-    const fallbackWeather = async () => {
-      try {
-        const r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=52.31&longitude=-114.10&current_weather=true");
-        const w = await r.json();
-        weatherEl.innerText = `SYLVAN LAKE: ${Math.round(w.current_weather.temperature)}°C`;
-      } catch {
-        weatherEl.innerText = "WEATHER ERR";
+      const lat = Number(pos.coords.latitude.toFixed(4));
+      const lon = Number(pos.coords.longitude.toFixed(4));
+      lastWeatherCoords = { lat, lon };
+
+      const [weatherRes, label] = await Promise.all([
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`),
+        reverseGeocodeLabel(lat, lon)
+      ]);
+
+      const weatherData = await weatherRes.json();
+      const temp = weatherData?.current_weather?.temperature;
+
+      lastWeatherLabel = label || "LOCAL";
+
+      if (typeof temp === "number") {
+        weatherEl.innerText = `${String(lastWeatherLabel).toUpperCase()}: ${Math.round(temp)}°C`;
+      } else {
+        weatherEl.innerText = `${String(lastWeatherLabel).toUpperCase()}: --°C`;
       }
-    };
+    } catch (e) {
+      console.error("weather fetch failed:", e);
 
-    if (!navigator.geolocation) {
-      await fallbackWeather();
-      return;
+      if (lastWeatherCoords) {
+        weatherEl.innerText = `${String(lastWeatherLabel).toUpperCase()}: --°C`;
+      } else {
+        weatherEl.innerText = "WEATHER DENIED";
+      }
     }
-
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-
-          const weatherPromise = fetch(`https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current_weather=true`);
-          const geoPromise = fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`);
-
-          const [weatherRes, geoRes] = await Promise.all([weatherPromise, geoPromise]);
-          const weatherData = await weatherRes.json();
-          const geoData = await geoRes.json();
-
-          const temp = Math.round(weatherData?.current_weather?.temperature);
-          const place = getPlaceLabelFromReverseGeocode(geoData).toUpperCase();
-
-          weatherEl.innerText = `${place}: ${temp}°C`;
-        } catch {
-          await fallbackWeather();
-        }
-      },
-      async () => {
-        await fallbackWeather();
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 }
-    );
   }
 
   function getNotes() {
@@ -897,56 +1005,6 @@ WEBGPU: ${webgpu}`;
     const seconds = Math.floor((totalMs % 60000) / 1000);
     const millis = totalMs % 1000;
     return `${String(minutes).padStart(2,"0")}:${String(seconds).padStart(2,"0")}.${String(millis).padStart(3,"0")}`;
-  }
-
-  function clearSpeechBuffers() {
-    finalSpeechBuffer = "";
-    interimSpeechBuffer = "";
-
-    if (speechCommitTimer) {
-      clearTimeout(speechCommitTimer);
-      speechCommitTimer = null;
-    }
-  }
-
-  function normalizedSpeech(text) {
-    return String(text || "")
-      .toLowerCase()
-      .replace(/[^\w\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  function looksLikeSelfEcho(transcript) {
-    const heard = normalizedSpeech(transcript);
-    const spoken = normalizedSpeech(lastSpokenText);
-
-    if (!heard || !spoken) return false;
-    if (heard.length < 4) return false;
-
-    return spoken.includes(heard) || heard.includes(spoken.slice(0, Math.min(heard.length, spoken.length)));
-  }
-
-  function stripWakePrefix(text) {
-    return String(text || "")
-      .replace(/^\s*(hey\s+)?(okatan|katana)\b[\s,:-]*/i, "")
-      .trim();
-  }
-
-  function containsWakeWord(text) {
-    return /\b(okatan|katana)\b/i.test(text);
-  }
-
-  function commitSpeechInput(forceText = "") {
-    const input = document.getElementById("in");
-    const combined = (forceText || `${finalSpeechBuffer} ${interimSpeechBuffer}`).trim();
-
-    clearSpeechBuffers();
-
-    if (!combined) return;
-
-    input.value = combined;
-    strike();
   }
 
   function startStopwatch() {
@@ -1135,6 +1193,11 @@ WEBGPU: ${webgpu}`;
     if (!text.trim()) return "EMPTY MEMORY.";
     const memory = getMemory();
     memory.push(text.trim());
+
+    if (memory.length > 20) {
+      memory.splice(0, memory.length - 20);
+    }
+
     saveMemory(memory);
     return "MEMORY STORED.";
   }
@@ -1427,18 +1490,14 @@ WEBGPU: ${webgpu}`;
     voiceMode = enabled;
     localStorage.setItem(VOICE_KEY, String(enabled));
 
-    clearSpeechBuffers();
-
-    if (!enabled && activeRecognition) {
-      try { activeRecognition.stop(); } catch (e) { console.error(e); }
-    }
-
     if (!enabled) {
-      isListening = false;
-      activeRecognition = null;
+      if (activeRecognition) {
+        try { activeRecognition.stop(); } catch (e) { console.error(e); }
+      }
+      stopInterruptListener();
     }
 
-    if (enabled && authenticated && !isListening) {
+    if (enabled && authenticated && !isListening && !document.body.classList.contains("talking")) {
       setTimeout(() => listenAction(true), 250);
     }
 
@@ -1446,19 +1505,12 @@ WEBGPU: ${webgpu}`;
   }
 
   function scheduleVoiceRelisten() {
-    if (!voiceMode || !authenticated || isListening) return;
-
+    if (!voiceMode || !authenticated) return;
     setTimeout(() => {
-      if (!voiceMode || !authenticated || isListening) return;
-      listenAction(true);
+      if (!document.body.classList.contains("talking") && !isListening) {
+        listenAction(true);
+      }
     }, 450);
-  }
-
-  function stopTalking() {
-    try { window.speechSynthesis.cancel(); } catch (e) { console.error(e); }
-    activeUtterance = null;
-    document.body.classList.remove("talking");
-    suppressMicUntil = Date.now() + 250;
   }
 
   function getOnlineOfflineCapabilities() {
@@ -1533,9 +1585,7 @@ search [query]<br>
 map [location]<br>
 route [start] to [end]<br>
 bible [verse]<br>
-general AI chat through Groq<br>
-recent conversation memory enabled<br>
-OKATAN / KATANA wake and identity enabled`;
+general AI chat through Groq`;
   }
 
   async function getCoords() {
@@ -1760,7 +1810,7 @@ OKATAN / KATANA wake and identity enabled`;
 
     if (/^[0-9+\-*/().\s×÷]+$/.test(val) && /[+\-*/×÷]/.test(val)) {
       try {
-        return `RESULT: <b>${Function(\`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})\`)()}</b>`;
+        return `RESULT: <b>${Function(`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})`)()}</b>`;
       } catch {
         return "CALC ERROR.";
       }
@@ -1770,7 +1820,7 @@ OKATAN / KATANA wake and identity enabled`;
       const expr = val.slice(5).trim().replace(/×/g, "*").replace(/÷/g, "/");
       if (!/^[0-9+\-*/().\s]+$/.test(expr)) return "INVALID CALC INPUT.";
       try {
-        return `RESULT: <b>${Function(\`"use strict"; return (${expr})\`)()}</b>`;
+        return `RESULT: <b>${Function(`"use strict"; return (${expr})`)()}</b>`;
       } catch {
         return "CALC ERROR.";
       }
@@ -1791,11 +1841,13 @@ OKATAN / KATANA wake and identity enabled`;
       try { activeRecognition.stop(); } catch (e) { console.error(e); }
     }
 
+    stopInterruptListener();
+
     isListening = false;
     activeRecognition = null;
-    clearSpeechBuffers();
 
-    stopTalking();
+    window.speechSynthesis.cancel();
+    document.body.classList.remove("talking");
     document.body.classList.remove("emergency-active");
     stopSiren();
 
@@ -1825,10 +1877,14 @@ OKATAN / KATANA wake and identity enabled`;
 
     if (authenticated) unlockUI();
     if (isOffline) document.body.classList.add("offline-active");
+
     updateClock();
     setInterval(updateClock, 1000);
-    fetchWeather(true);
-    setInterval(() => fetchWeather(false), 300000);
+
+    fetchWeather();
+
+    if (weatherInterval) clearInterval(weatherInterval);
+    weatherInterval = setInterval(fetchWeather, 600000);
   };
 
   function unlockUI() {
@@ -1844,7 +1900,7 @@ OKATAN / KATANA wake and identity enabled`;
 
     loadSlot(1);
 
-    if (voiceMode && authenticated && !isListening) {
+    if (voiceMode && authenticated && !document.body.classList.contains("talking")) {
       setTimeout(() => {
         if (!isListening && voiceMode) listenAction(true);
       }, 500);
@@ -1852,33 +1908,38 @@ OKATAN / KATANA wake and identity enabled`;
   }
 
   function talk(txt) {
-    stopTalking();
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      console.error(e);
+    }
 
-    const cleanText = String(txt).replace(/<[^>]*>/g, "").trim();
-    if (!cleanText) return;
+    const cleaned = String(txt).replace(/<[^>]*>/g, "").trim();
+    if (!cleaned) return;
 
-    lastSpokenText = cleanText;
-    activeUtterance = new SpeechSynthesisUtterance(cleanText);
-    activeUtterance.pitch = 0.8;
-    activeUtterance.rate = 1.1;
+    const u = new SpeechSynthesisUtterance(cleaned);
+    u.pitch = 0.8;
+    u.rate = 1.1;
 
-    document.body.classList.add("talking");
+    u.onstart = () => {
+      document.body.classList.add("talking");
+      if (voiceMode) startInterruptListener();
+    };
 
-    activeUtterance.onend = () => {
-      activeUtterance = null;
+    u.onend = () => {
       document.body.classList.remove("talking");
-      suppressMicUntil = Date.now() + 350;
+      stopInterruptListener();
       scheduleVoiceRelisten();
     };
 
-    activeUtterance.onerror = () => {
-      activeUtterance = null;
+    u.onerror = (e) => {
+      console.error("speech error:", e);
       document.body.classList.remove("talking");
-      suppressMicUntil = Date.now() + 350;
+      stopInterruptListener();
       scheduleVoiceRelisten();
     };
 
-    window.speechSynthesis.speak(activeUtterance);
+    window.speechSynthesis.speak(u);
   }
 
   function offlineBlocked(featureName) {
@@ -2003,7 +2064,7 @@ OKATAN / KATANA wake and identity enabled`;
     }
     else if (/^[0-9+\-*/().\s×÷]+$/.test(val) && /[+\-*/×÷]/.test(val)) {
       try {
-        res = `Result: <b>${Function(\`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})\`)()}</b>`;
+        res = `Result: <b>${Function(`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})`)()}</b>`;
       } catch {
         res = "Error.";
       }
@@ -2013,7 +2074,6 @@ OKATAN / KATANA wake and identity enabled`;
         res = "UPLINK KEY MISSING. REFRESH TO SYNC.";
       } else {
         try {
-          const historyMessages = getChatMemory();
           const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -2022,19 +2082,12 @@ OKATAN / KATANA wake and identity enabled`;
             },
             body: JSON.stringify({
               model: "llama-3.3-70b-versatile",
-              messages: [
-                { role: "system", content: SYSTEM_PROMPT },
-                ...historyMessages,
-                { role: "user", content: val }
-              ]
+              messages: buildGroqMessages()
             })
           });
 
           const data = await response.json();
           res = data?.choices?.[0]?.message?.content || "NEURAL LINK FAILED.";
-
-          pushChatMemory("user", val);
-          pushChatMemory("assistant", res);
         } catch (e) {
           console.error(e);
           res = "NEURAL LINK FAILED.";
@@ -2043,7 +2096,13 @@ OKATAN / KATANA wake and identity enabled`;
     }
 
     addMsg(res, "bot");
-    talk(res);
+
+    const spoken = stripHTML(res);
+    if (spoken && !/<iframe|<button/i.test(res)) {
+      talk(spoken);
+    } else {
+      scheduleVoiceRelisten();
+    }
   }
 
   function toggleSpectrum() {
@@ -2051,6 +2110,7 @@ OKATAN / KATANA wake and identity enabled`;
     localStorage.setItem("ok_offline", isOffline);
     location.reload();
   }
+
   function addMsg(t, s, saveLog = true) {
     const d = document.createElement("div");
     d.className = `msg ${s}`;
@@ -2092,7 +2152,7 @@ OKATAN / KATANA wake and identity enabled`;
   function loadSlot(id) {
     activeSlot = id;
     document.getElementById("sub-label").innerText = `ARCHIVE [ ${id} ]`;
-    document.getElementById("visor").innerHTML = "";
+    document.getElementById("visor").innerHTML = '';
 
     if (id === 11) {
       renderSystemPanel();
@@ -2163,17 +2223,16 @@ OKATAN / KATANA wake and identity enabled`;
       return;
     }
 
-    if (Date.now() < suppressMicUntil) return;
-    if (isListening) return;
+    stopInterruptListener();
 
-    clearSpeechBuffers();
+    if (isListening) return;
 
     const r = new Rec();
     activeRecognition = r;
     r.lang = navigator.language || "en-US";
-    r.interimResults = true;
+    r.interimResults = false;
     r.maxAlternatives = 1;
-    r.continuous = true;
+    r.continuous = false;
 
     r.onstart = () => {
       isListening = true;
@@ -2182,65 +2241,10 @@ OKATAN / KATANA wake and identity enabled`;
     };
 
     r.onresult = (e) => {
-      if (Date.now() < suppressMicUntil) return;
-
-      for (let idx = e.resultIndex; idx < e.results.length; idx++) {
-        const result = e.results[idx];
-        const transcript = result?.[0]?.transcript?.trim();
-        if (!transcript) continue;
-
-        const low = normalizedSpeech(transcript);
-        const hasWake = containsWakeWord(low);
-
-        if (document.body.classList.contains("talking")) {
-          if (hasWake) {
-            stopTalking();
-            wakeInterruptWindow = true;
-            clearSpeechBuffers();
-            return;
-          }
-
-          if (looksLikeSelfEcho(low)) {
-            continue;
-          }
-        }
-
-        let cleaned = stripWakePrefix(transcript);
-
-        if (wakeInterruptWindow && !cleaned && hasWake) {
-          return;
-        }
-
-        if (wakeInterruptWindow && !hasWake && cleaned) {
-          wakeInterruptWindow = false;
-        }
-
-        if (result.isFinal) {
-          if (hasWake && !cleaned) {
-            wakeInterruptWindow = true;
-            return;
-          }
-
-          if (cleaned) {
-            finalSpeechBuffer = `${finalSpeechBuffer} ${cleaned}`.trim();
-          } else if (!hasWake) {
-            finalSpeechBuffer = `${finalSpeechBuffer} ${transcript}`.trim();
-          }
-
-          interimSpeechBuffer = "";
-
-          if (speechCommitTimer) clearTimeout(speechCommitTimer);
-          speechCommitTimer = setTimeout(() => {
-            if (!document.body.classList.contains("talking")) {
-              commitSpeechInput();
-            }
-          }, 700);
-        } else {
-          if (!hasWake || cleaned) {
-            interimSpeechBuffer = cleaned || transcript;
-          }
-        }
-      }
+      const heard = e.results?.[0]?.[0]?.transcript?.trim();
+      if (!heard) return;
+      document.getElementById("in").value = heard;
+      strike();
     };
 
     r.onerror = (e) => {
@@ -2259,16 +2263,10 @@ OKATAN / KATANA wake and identity enabled`;
       isListening = false;
       activeRecognition = null;
       document.getElementById("in").placeholder = authenticated ? "Query the Domain..." : "System Lockdown...";
-
-      if ((finalSpeechBuffer || interimSpeechBuffer) && !document.body.classList.contains("talking")) {
-        commitSpeechInput();
-        return;
-      }
-
-      if (voiceMode && authenticated) {
+      if (voiceMode && authenticated && !document.body.classList.contains("talking")) {
         setTimeout(() => {
           if (!isListening && voiceMode) listenAction(true);
-        }, 450);
+        }, 650);
       }
     };
 
