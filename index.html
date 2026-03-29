@@ -521,6 +521,12 @@ No emojis.
   let lastSpokenText = "";
   let lastWeatherFetch = 0;
 
+  let speechCommitTimer = null;
+  let finalSpeechBuffer = "";
+  let interimSpeechBuffer = "";
+  let wakeInterruptWindow = false;
+  let suppressMicUntil = 0;
+
   function updateMouse(e) {
     if (e.touches) {
       mouseX = e.touches[0].clientX;
@@ -891,6 +897,56 @@ WEBGPU: ${webgpu}`;
     const seconds = Math.floor((totalMs % 60000) / 1000);
     const millis = totalMs % 1000;
     return `${String(minutes).padStart(2,"0")}:${String(seconds).padStart(2,"0")}.${String(millis).padStart(3,"0")}`;
+  }
+
+  function clearSpeechBuffers() {
+    finalSpeechBuffer = "";
+    interimSpeechBuffer = "";
+
+    if (speechCommitTimer) {
+      clearTimeout(speechCommitTimer);
+      speechCommitTimer = null;
+    }
+  }
+
+  function normalizedSpeech(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function looksLikeSelfEcho(transcript) {
+    const heard = normalizedSpeech(transcript);
+    const spoken = normalizedSpeech(lastSpokenText);
+
+    if (!heard || !spoken) return false;
+    if (heard.length < 4) return false;
+
+    return spoken.includes(heard) || heard.includes(spoken.slice(0, Math.min(heard.length, spoken.length)));
+  }
+
+  function stripWakePrefix(text) {
+    return String(text || "")
+      .replace(/^\s*(hey\s+)?(okatan|katana)\b[\s,:-]*/i, "")
+      .trim();
+  }
+
+  function containsWakeWord(text) {
+    return /\b(okatan|katana)\b/i.test(text);
+  }
+
+  function commitSpeechInput(forceText = "") {
+    const input = document.getElementById("in");
+    const combined = (forceText || `${finalSpeechBuffer} ${interimSpeechBuffer}`).trim();
+
+    clearSpeechBuffers();
+
+    if (!combined) return;
+
+    input.value = combined;
+    strike();
   }
 
   function startStopwatch() {
@@ -1371,8 +1427,15 @@ WEBGPU: ${webgpu}`;
     voiceMode = enabled;
     localStorage.setItem(VOICE_KEY, String(enabled));
 
+    clearSpeechBuffers();
+
     if (!enabled && activeRecognition) {
       try { activeRecognition.stop(); } catch (e) { console.error(e); }
+    }
+
+    if (!enabled) {
+      isListening = false;
+      activeRecognition = null;
     }
 
     if (enabled && authenticated && !isListening) {
@@ -1384,33 +1447,18 @@ WEBGPU: ${webgpu}`;
 
   function scheduleVoiceRelisten() {
     if (!voiceMode || !authenticated || isListening) return;
+
     setTimeout(() => {
-      if (!isListening && voiceMode) {
-        listenAction(true);
-      }
-    }, 300);
+      if (!voiceMode || !authenticated || isListening) return;
+      listenAction(true);
+    }, 450);
   }
 
   function stopTalking() {
     try { window.speechSynthesis.cancel(); } catch (e) { console.error(e); }
     activeUtterance = null;
     document.body.classList.remove("talking");
-  }
-
-  function looksLikeSelfEcho(transcript) {
-    if (!lastSpokenText) return false;
-    const a = transcript.toLowerCase().replace(/[^\w\s]/g, "").trim();
-    const b = lastSpokenText.toLowerCase().replace(/[^\w\s]/g, "").trim();
-    if (!a || !b) return false;
-    return b.includes(a) || a.includes(b.slice(0, Math.min(40, b.length)));
-  }
-
-  function stripWakePrefix(text) {
-    return text.replace(/^(hey\s+)?(okatan|katana)\b[:,\s-]*/i, "").trim();
-  }
-
-  function containsWakeWord(text) {
-    return /\b(okatan|katana)\b/i.test(text);
+    suppressMicUntil = Date.now() + 250;
   }
 
   function getOnlineOfflineCapabilities() {
@@ -1712,7 +1760,7 @@ OKATAN / KATANA wake and identity enabled`;
 
     if (/^[0-9+\-*/().\s×÷]+$/.test(val) && /[+\-*/×÷]/.test(val)) {
       try {
-        return `RESULT: <b>${Function(`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})`)()}</b>`;
+        return `RESULT: <b>${Function(\`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})\`)()}</b>`;
       } catch {
         return "CALC ERROR.";
       }
@@ -1722,7 +1770,7 @@ OKATAN / KATANA wake and identity enabled`;
       const expr = val.slice(5).trim().replace(/×/g, "*").replace(/÷/g, "/");
       if (!/^[0-9+\-*/().\s]+$/.test(expr)) return "INVALID CALC INPUT.";
       try {
-        return `RESULT: <b>${Function(`"use strict"; return (${expr})`)()}</b>`;
+        return `RESULT: <b>${Function(\`"use strict"; return (${expr})\`)()}</b>`;
       } catch {
         return "CALC ERROR.";
       }
@@ -1745,6 +1793,7 @@ OKATAN / KATANA wake and identity enabled`;
 
     isListening = false;
     activeRecognition = null;
+    clearSpeechBuffers();
 
     stopTalking();
     document.body.classList.remove("emergency-active");
@@ -1795,7 +1844,7 @@ OKATAN / KATANA wake and identity enabled`;
 
     loadSlot(1);
 
-    if (voiceMode && authenticated) {
+    if (voiceMode && authenticated && !isListening) {
       setTimeout(() => {
         if (!isListening && voiceMode) listenAction(true);
       }, 500);
@@ -1818,12 +1867,14 @@ OKATAN / KATANA wake and identity enabled`;
     activeUtterance.onend = () => {
       activeUtterance = null;
       document.body.classList.remove("talking");
+      suppressMicUntil = Date.now() + 350;
       scheduleVoiceRelisten();
     };
 
     activeUtterance.onerror = () => {
       activeUtterance = null;
       document.body.classList.remove("talking");
+      suppressMicUntil = Date.now() + 350;
       scheduleVoiceRelisten();
     };
 
@@ -1952,7 +2003,7 @@ OKATAN / KATANA wake and identity enabled`;
     }
     else if (/^[0-9+\-*/().\s×÷]+$/.test(val) && /[+\-*/×÷]/.test(val)) {
       try {
-        res = `Result: <b>${Function(`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})`)()}</b>`;
+        res = `Result: <b>${Function(\`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})\`)()}</b>`;
       } catch {
         res = "Error.";
       }
@@ -2000,7 +2051,6 @@ OKATAN / KATANA wake and identity enabled`;
     localStorage.setItem("ok_offline", isOffline);
     location.reload();
   }
-
   function addMsg(t, s, saveLog = true) {
     const d = document.createElement("div");
     d.className = `msg ${s}`;
@@ -2042,7 +2092,7 @@ OKATAN / KATANA wake and identity enabled`;
   function loadSlot(id) {
     activeSlot = id;
     document.getElementById("sub-label").innerText = `ARCHIVE [ ${id} ]`;
-    document.getElementById("visor").innerHTML = '';
+    document.getElementById("visor").innerHTML = "";
 
     if (id === 11) {
       renderSystemPanel();
@@ -2113,7 +2163,10 @@ OKATAN / KATANA wake and identity enabled`;
       return;
     }
 
+    if (Date.now() < suppressMicUntil) return;
     if (isListening) return;
+
+    clearSpeechBuffers();
 
     const r = new Rec();
     activeRecognition = r;
@@ -2129,42 +2182,64 @@ OKATAN / KATANA wake and identity enabled`;
     };
 
     r.onresult = (e) => {
+      if (Date.now() < suppressMicUntil) return;
+
       for (let idx = e.resultIndex; idx < e.results.length; idx++) {
         const result = e.results[idx];
         const transcript = result?.[0]?.transcript?.trim();
         if (!transcript) continue;
 
-        const lower = transcript.toLowerCase();
-        const hasWake = containsWakeWord(lower);
+        const low = normalizedSpeech(transcript);
+        const hasWake = containsWakeWord(low);
 
         if (document.body.classList.contains("talking")) {
           if (hasWake) {
             stopTalking();
-            continue;
+            wakeInterruptWindow = true;
+            clearSpeechBuffers();
+            return;
           }
-          if (looksLikeSelfEcho(lower)) {
+
+          if (looksLikeSelfEcho(low)) {
             continue;
           }
         }
-
-        if (!result.isFinal) continue;
 
         let cleaned = stripWakePrefix(transcript);
 
-        if (!cleaned && hasWake) {
-          stopTalking();
-          continue;
+        if (wakeInterruptWindow && !cleaned && hasWake) {
+          return;
         }
 
-        if (hasWake && document.body.classList.contains("talking")) {
-          stopTalking();
-          if (!cleaned) continue;
+        if (wakeInterruptWindow && !hasWake && cleaned) {
+          wakeInterruptWindow = false;
         }
 
-        document.getElementById("in").value = cleaned || transcript;
-        try { r.stop(); } catch (err) { console.error(err); }
-        strike();
-        return;
+        if (result.isFinal) {
+          if (hasWake && !cleaned) {
+            wakeInterruptWindow = true;
+            return;
+          }
+
+          if (cleaned) {
+            finalSpeechBuffer = `${finalSpeechBuffer} ${cleaned}`.trim();
+          } else if (!hasWake) {
+            finalSpeechBuffer = `${finalSpeechBuffer} ${transcript}`.trim();
+          }
+
+          interimSpeechBuffer = "";
+
+          if (speechCommitTimer) clearTimeout(speechCommitTimer);
+          speechCommitTimer = setTimeout(() => {
+            if (!document.body.classList.contains("talking")) {
+              commitSpeechInput();
+            }
+          }, 700);
+        } else {
+          if (!hasWake || cleaned) {
+            interimSpeechBuffer = cleaned || transcript;
+          }
+        }
       }
     };
 
@@ -2184,6 +2259,12 @@ OKATAN / KATANA wake and identity enabled`;
       isListening = false;
       activeRecognition = null;
       document.getElementById("in").placeholder = authenticated ? "Query the Domain..." : "System Lockdown...";
+
+      if ((finalSpeechBuffer || interimSpeechBuffer) && !document.body.classList.contains("talking")) {
+        commitSpeechInput();
+        return;
+      }
+
       if (voiceMode && authenticated) {
         setTimeout(() => {
           if (!isListening && voiceMode) listenAction(true);
