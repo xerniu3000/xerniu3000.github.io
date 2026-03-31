@@ -3308,12 +3308,12 @@ clear api all`;
     if (!cleaned) return;
 
     let spoken = cleaned;
-    if (spoken.length > 280) {
+    if (spoken.length 28000) {
       const split = spoken.match(/.*?[.!?](\s|$)/g);
       if (split && split.length) {
-        spoken = split.slice(0, 2).join(" ").trim();
+        spoken = split.slice(0, 200).join(" ").trim();
       } else {
-        spoken = spoken.slice(0, 280).trim();
+        spoken = spoken.slice(0, 28000).trim();
       }
     }
 
