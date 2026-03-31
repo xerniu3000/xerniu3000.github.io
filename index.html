@@ -3311,6 +3311,9 @@ clear api all`;
 
   if (!cleaned) return;
 
+  speechSessionId++;
+  const mySession = speechSessionId;
+
   try {
     window.speechSynthesis.cancel();
   } catch (e) {
@@ -3341,12 +3344,15 @@ clear api all`;
   let index = 0;
 
   function finishTalking() {
+    if (mySession !== speechSessionId) return;
     document.body.classList.remove("talking");
     stopInterruptListener();
     scheduleVoiceRelisten();
   }
 
   function speakNext() {
+    if (mySession !== speechSessionId) return;
+
     if (index >= chunks.length) {
       finishTalking();
       return;
@@ -3358,24 +3364,33 @@ clear api all`;
     u.rate = 1.1;
 
     u.onstart = () => {
+      if (mySession !== speechSessionId) return;
       document.body.classList.add("talking");
       startInterruptListener();
     };
 
     u.onend = () => {
-      setTimeout(speakNext, 60);
+      if (mySession !== speechSessionId) return;
+      setTimeout(() => {
+        if (mySession !== speechSessionId) return;
+        speakNext();
+      }, 60);
     };
 
     u.onerror = (e) => {
       console.error("Speech error:", e);
-      setTimeout(speakNext, 60);
+      if (mySession !== speechSessionId) return;
+      setTimeout(() => {
+        if (mySession !== speechSessionId) return;
+        speakNext();
+      }, 60);
     };
 
     window.speechSynthesis.speak(u);
   }
 
   speakNext();
-}
+  }
 
   function offlineBlocked(featureName) {
     if (String(featureName).toLowerCase() === "gather") {
