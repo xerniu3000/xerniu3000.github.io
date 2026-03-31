@@ -3867,7 +3867,42 @@ clear api all`;
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
     else document.exitFullscreen();
   }
+const micTrigger = document.getElementById("mic-trigger");
 
+let micPressTimer = null;
+let micLongPressFired = false;
+
+function setupMicButton() {
+  if (!micTrigger) return;
+
+  const startPress = () => {
+    micLongPressFired = false;
+
+    micPressTimer = setTimeout(() => {
+      micLongPressFired = true;
+      stopTalking();
+      addMsg("VOICE OUTPUT HALTED.", "bot");
+    }, 500);
+  };
+
+  const endPress = () => {
+    clearTimeout(micPressTimer);
+  };
+
+  micTrigger.addEventListener("mousedown", startPress);
+  micTrigger.addEventListener("touchstart", startPress, { passive: true });
+
+  micTrigger.addEventListener("mouseup", endPress);
+  micTrigger.addEventListener("mouseleave", endPress);
+  micTrigger.addEventListener("touchend", endPress);
+  micTrigger.addEventListener("touchcancel", endPress);
+
+  micTrigger.addEventListener("click", () => {
+    if (micLongPressFired) return;
+    startMic();
+  });
+}
+  
   function startMic() {
     if (!authenticated) return;
     listenAction(false);
