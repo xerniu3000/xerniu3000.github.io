@@ -317,6 +317,7 @@
       justify-content: center;
       gap: 4px;
       min-width: 50px;
+      font-family: inherit;
     }
 
     .mic-dot {
@@ -450,6 +451,11 @@
   <button class="mic-btn" id="mic-trigger" onclick="startMic()">
     <span class="mic-dot"></span><span class="mic-dot"></span><span class="mic-dot"></span>
   </button>
+
+  <button class="mic-btn" id="stop-trigger" onclick="forceStopTalking()">
+    STOP
+  </button>
+
   <input id="in" placeholder="System Lockdown..." type="password" onkeydown="if(event.key==='Enter') strike();">
   <button class="strike-btn" onclick="strike()">STRIKE</button>
 </footer>
@@ -2545,17 +2551,22 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
   }
 
   function isInterruptCommand(text) {
-  const heard = normalizeInterruptPhrase(text);
-  return (
-    heard.includes("stop") ||
-    heard.includes("stop talking") ||
-    heard.includes("be quiet") ||
-    heard.includes("okatan stop") ||
-    heard.includes("katana stop") ||
-    heard.includes("hey okatan stop") ||
-    heard.includes("hey katana stop")
-  );
-}
+    const heard = normalizeInterruptPhrase(text);
+
+    return [
+      "stop",
+      "stop talking",
+      "be quiet",
+      "quiet",
+      "silence",
+      "okatan stop",
+      "katana stop",
+      "hey okatan stop",
+      "hey katana stop",
+      "okatan be quiet",
+      "katana be quiet"
+    ].some(cmd => heard.includes(cmd));
+  }
 
   function stopInterruptListener() {
     const oldRecognition = interruptRecognition;
@@ -2572,118 +2583,124 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
   }
 
   let speechQueue = [];
-let speakingActive = false;
+  let speakingActive = false;
 
-function forceStopTalking() {
-  speechQueue = [];
-  speakingActive = false;
-  abortCurrentGather();
-  stopInterruptListener();
-  document.body.classList.remove("talking");
+  function forceStopTalking() {
+    speechSessionId++;
+    speechQueue = [];
+    speakingActive = false;
 
-  try {
-    window.speechSynthesis.pause();
-  } catch (e) {
-    console.error(e);
-  }
+    abortCurrentGather();
+    stopInterruptListener();
 
-  try {
-    window.speechSynthesis.cancel();
-  } catch (e) {
-    console.error(e);
-  }
+    document.body.classList.remove("talking");
 
-  setTimeout(() => {
     try {
       window.speechSynthesis.cancel();
     } catch (e) {
       console.error(e);
     }
-  }, 60);
 
-  setTimeout(() => {
-    try {
-      window.speechSynthesis.cancel();
-    } catch (e) {
-      console.error(e);
-    }
-  }, 180);
-}
-
-function stopTalking() {
-  forceStopTalking();
-}
-
-  function startInterruptListener() {
-  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Rec) return;
-  if (!document.body.classList.contains("talking")) return;
-
-  stopInterruptListener();
-
-  const r = new Rec();
-  interruptRecognition = r;
-  r.lang = navigator.language || "en-US";
-  r.interimResults = true;
-  r.maxAlternatives = 3;
-  r.continuous = true;
-
-  r.onstart = () => {
-    interruptListening = true;
-  };
-
-  r.onresult = (e) => {
-    const results = e.results || [];
-    for (let i = e.resultIndex || 0; i < results.length; i++) {
-      const transcript = results[i]?.[0]?.transcript?.trim();
-      if (!transcript) continue;
-
-      if (isInterruptCommand(transcript)) {
-        forceStopTalking();
-        scheduleVoiceRelisten();
-        return;
-      }
-    }
-  };
-
-  r.onerror = (e) => {
-    console.error(e);
-    interruptListening = false;
-
-    const harmless =
-      e?.error === "aborted" ||
-      e?.error === "no-speech" ||
-      e?.error === "network";
-
-    if (!harmless) {
-      stopInterruptListener();
-    }
-  };
-
-  r.onend = () => {
-    interruptListening = false;
-
-    if (interruptRecognition !== r) return;
-
-    if (document.body.classList.contains("talking")) {
+    setTimeout(() => {
       try {
-        r.start();
+        window.speechSynthesis.cancel();
       } catch (e) {
         console.error(e);
+      }
+    }, 50);
+
+    setTimeout(() => {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {
+        console.error(e);
+      }
+    }, 150);
+
+    if (voiceMode && authenticated) {
+      setTimeout(() => {
+        if (!document.body.classList.contains("talking") && !isListening) {
+          listenAction(true);
+        }
+      }, 300);
+    }
+  }
+
+  function stopTalking() {
+    forceStopTalking();
+  }
+
+  function startInterruptListener() {
+    const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Rec) return;
+    if (!document.body.classList.contains("talking")) return;
+
+    stopInterruptListener();
+
+    const r = new Rec();
+    interruptRecognition = r;
+    r.lang = navigator.language || "en-US";
+    r.interimResults = true;
+    r.maxAlternatives = 3;
+    r.continuous = true;
+
+    r.onstart = () => {
+      interruptListening = true;
+    };
+
+    r.onresult = (e) => {
+      const results = e.results || [];
+      for (let i = e.resultIndex || 0; i < results.length; i++) {
+        const transcript = results[i]?.[0]?.transcript?.trim();
+        if (!transcript) continue;
+
+        if (isInterruptCommand(transcript)) {
+          forceStopTalking();
+          scheduleVoiceRelisten();
+          return;
+        }
+      }
+    };
+
+    r.onerror = (e) => {
+      console.error(e);
+      interruptListening = false;
+
+      const harmless =
+        e?.error === "aborted" ||
+        e?.error === "no-speech" ||
+        e?.error === "network";
+
+      if (!harmless) {
         stopInterruptListener();
       }
-    } else {
+    };
+
+    r.onend = () => {
+      interruptListening = false;
+
+      if (interruptRecognition !== r) return;
+
+      if (document.body.classList.contains("talking")) {
+        try {
+          r.start();
+        } catch (e) {
+          console.error(e);
+          stopInterruptListener();
+        }
+      } else {
+        stopInterruptListener();
+      }
+    };
+
+    try {
+      r.start();
+    } catch (e) {
+      console.error(e);
       stopInterruptListener();
     }
-  };
-
-  try {
-    r.start();
-  } catch (e) {
-    console.error(e);
-    stopInterruptListener();
   }
-}
+
   function applyMinimalMode(enabled) {
     minimalMode = enabled;
     localStorage.setItem(MINIMAL_KEY, String(enabled));
@@ -3339,92 +3356,97 @@ clear api all`;
   }
 
   function talk(txt) {
-  const cleaned = String(txt)
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+    const cleaned = String(txt)
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
 
-  if (!cleaned) return;
+    if (!cleaned) return;
 
-  speechSessionId++;
-  const mySession = speechSessionId;
+    forceStopTalking();
 
-  try {
-    window.speechSynthesis.cancel();
-  } catch (e) {
-    console.error(e);
-  }
+    speechSessionId++;
+    const mySession = speechSessionId;
 
-  document.body.classList.remove("talking");
-  stopInterruptListener();
+    const sentenceChunks = cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [cleaned];
+    const chunks = [];
 
-  const sentenceChunks = cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [cleaned];
-  const chunks = [];
+    sentenceChunks.forEach(sentence => {
+      const s = sentence.trim();
+      if (!s) return;
 
-  sentenceChunks.forEach(sentence => {
-    const s = sentence.trim();
-    if (!s) return;
+      if (s.length <= 180) {
+        chunks.push(s);
+      } else {
+        const parts = s.match(/.{1,180}(\s|$)/g) || [s];
+        parts.forEach(part => {
+          const p = part.trim();
+          if (p) chunks.push(p);
+        });
+      }
+    });
 
-    if (s.length <= 180) {
-      chunks.push(s);
-    } else {
-      const parts = s.match(/.{1,180}(\s|$)/g) || [s];
-      parts.forEach(part => {
-        const p = part.trim();
-        if (p) chunks.push(p);
-      });
-    }
-  });
+    let index = 0;
 
-  let index = 0;
-
-  function finishTalking() {
-    if (mySession !== speechSessionId) return;
-    document.body.classList.remove("talking");
-    stopInterruptListener();
-    scheduleVoiceRelisten();
-  }
-
-  function speakNext() {
-    if (mySession !== speechSessionId) return;
-
-    if (index >= chunks.length) {
-      finishTalking();
-      return;
+    function finishTalking() {
+      if (mySession !== speechSessionId) return;
+      document.body.classList.remove("talking");
+      stopInterruptListener();
+      scheduleVoiceRelisten();
     }
 
-    const part = chunks[index++];
-    const u = new SpeechSynthesisUtterance(part);
-    u.pitch = 0.8;
-    u.rate = 1.1;
-
-    u.onstart = () => {
+    function speakNext() {
       if (mySession !== speechSessionId) return;
-      document.body.classList.add("talking");
-      startInterruptListener();
-    };
 
-    u.onend = () => {
-      if (mySession !== speechSessionId) return;
-      setTimeout(() => {
+      if (index >= chunks.length) {
+        finishTalking();
+        return;
+      }
+
+      const part = chunks[index++];
+      const u = new SpeechSynthesisUtterance(part);
+      u.pitch = 0.8;
+      u.rate = 1.1;
+
+      u.onstart = () => {
+        if (mySession !== speechSessionId) {
+          try { window.speechSynthesis.cancel(); } catch (e) { console.error(e); }
+          return;
+        }
+
+        document.body.classList.add("talking");
+        startInterruptListener();
+      };
+
+      u.onend = () => {
         if (mySession !== speechSessionId) return;
-        speakNext();
-      }, 60);
-    };
 
-    u.onerror = (e) => {
-      console.error("Speech error:", e);
-      if (mySession !== speechSessionId) return;
-      setTimeout(() => {
+        setTimeout(() => {
+          if (mySession !== speechSessionId) return;
+          speakNext();
+        }, 50);
+      };
+
+      u.onerror = (e) => {
+        console.error("Speech error:", e);
+
         if (mySession !== speechSessionId) return;
-        speakNext();
-      }, 60);
-    };
 
-    window.speechSynthesis.speak(u);
-  }
+        setTimeout(() => {
+          if (mySession !== speechSessionId) return;
+          speakNext();
+        }, 50);
+      };
 
-  speakNext();
+      try {
+        window.speechSynthesis.speak(u);
+      } catch (e) {
+        console.error(e);
+        finishTalking();
+      }
+    }
+
+    speakNext();
   }
 
   function offlineBlocked(featureName) {
@@ -3944,6 +3966,7 @@ clear api all`;
 
   function startMic() {
     if (!authenticated) return;
+    forceStopTalking();
     listenAction(false);
   }
 
