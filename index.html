@@ -2571,8 +2571,21 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
     }
   }
 
-  function stopTalking() {
-  speechSessionId++; // 🔥 kill all active speech loops immediately
+  let speechQueue = [];
+let speakingActive = false;
+
+function forceStopTalking() {
+  speechQueue = [];
+  speakingActive = false;
+  abortCurrentGather();
+  stopInterruptListener();
+  document.body.classList.remove("talking");
+
+  try {
+    window.speechSynthesis.pause();
+  } catch (e) {
+    console.error(e);
+  }
 
   try {
     window.speechSynthesis.cancel();
@@ -2580,9 +2593,25 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
     console.error(e);
   }
 
-  abortCurrentGather();
-  document.body.classList.remove("talking");
-  stopInterruptListener();
+  setTimeout(() => {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      console.error(e);
+    }
+  }, 60);
+
+  setTimeout(() => {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      console.error(e);
+    }
+  }, 180);
+}
+
+function stopTalking() {
+  forceStopTalking();
 }
 
   function startInterruptListener() {
