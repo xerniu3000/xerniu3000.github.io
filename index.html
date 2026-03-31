@@ -2568,16 +2568,18 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
   }
 
   function stopTalking() {
-    try {
-      window.speechSynthesis.cancel();
-    } catch (e) {
-      console.error(e);
-    }
+  speechSessionId++; // 🔥 kill all active speech loops immediately
 
-    abortCurrentGather();
-    document.body.classList.remove("talking");
-    stopInterruptListener();
+  try {
+    window.speechSynthesis.cancel();
+  } catch (e) {
+    console.error(e);
   }
+
+  abortCurrentGather();
+  document.body.classList.remove("talking");
+  stopInterruptListener();
+}
 
   function startInterruptListener() {
     const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
