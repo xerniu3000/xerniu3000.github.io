@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="OKATAN" />
-  
+
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="32x32" href="okatan-icon-192.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="okatan-icon-192.png" />
@@ -1954,7 +1954,8 @@ Respond as OKATAN.`;
       "date", "time", "battery", "coords", "coordinates", "compass",
       "help", "clear", "stand down", "emergency",
       "open offline chat", "open mlc", "download mlc apk", "copy brain",
-      "play ", "music ", "stop media", "stop video", "close media", "close video", "exit media", "exit video", "youtube history"
+      "play ", "music ", "yt ", "youtube ", "watch ",
+      "stop media", "stop video", "close media", "close video", "exit media", "exit video", "youtube history"
     ];
 
     if (blockedPrefixes.some(prefix => low.startsWith(prefix) || low === prefix.trim())) {
@@ -3016,7 +3017,10 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
   }
 
   function saveYoutubeHistory(history) {
-    localStorage.setItem(YOUTUBE_HISTORY_KEY, JSON.stringify(Array.isArray(history) ? history.slice(0, 25) : []));
+    localStorage.setItem(
+      YOUTUBE_HISTORY_KEY,
+      JSON.stringify(Array.isArray(history) ? history.slice(0, 25) : [])
+    );
   }
 
   function pushYoutubeHistory(entry) {
@@ -3092,7 +3096,11 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
     if (!shell) return;
     if (!mediaState.open) openMediaShell();
     shell.classList.toggle("fullscreen-mode");
-    setMediaStatus(shell.classList.contains("fullscreen-mode") ? "MEDIA BAY FULLSCREEN" : (mediaState.title ? `MEDIA ACTIVE: ${mediaState.title}` : "MEDIA BAY ACTIVE"));
+    setMediaStatus(
+      shell.classList.contains("fullscreen-mode")
+        ? "MEDIA BAY FULLSCREEN"
+        : (mediaState.title ? `MEDIA ACTIVE: ${mediaState.title}` : "MEDIA BAY ACTIVE")
+    );
   }
 
   function renderMediaHome() {
@@ -3108,6 +3116,9 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
         COMMANDS:<br>
         play [query]<br>
         music [query]<br>
+        yt [link, id, or search]<br>
+        youtube [link, id, or search]<br>
+        watch [link, id, or search]<br>
         youtube history<br>
         stop media<br>
         close media
@@ -3115,72 +3126,17 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
       ${history.length ? `
       <div class="media-card">
         <b>RECENT YOUTUBE HISTORY</b><br><br>
-        ${history.map((h, idx) => `<div style="margin-bottom:8px;">${idx + 1}. <a href="#" style="color:var(--halo);" onclick="openMediaByVideoId('${h.videoId.replace(/'/g, "\\'")}', '${String(h.title || "").replace(/'/g, "\\'")}', '${h.mode || "video"}'); return false;">${h.title}</a> — ${(h.mode || "video").toUpperCase()}</div>`).join("")}
+        ${history.map((h, idx) => `
+          <div style="margin-bottom:8px;">
+            ${idx + 1}.
+            <a href="#" style="color:var(--halo);" onclick="openMediaByVideoId('${String(h.videoId || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'")}', '${String(h.title || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'")}', '${String(h.mode || "video").replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'); return false;">
+              ${String(h.title || "UNTITLED").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+            </a> — ${(h.mode || "video").toUpperCase()}
+          </div>
+        `).join("")}
       </div>` : ""}
     `;
     setMediaStatus("MEDIA BAY READY");
-  }
-
-  function renderMediaFrame(videoId, title, mode) {
-  openMediaShell();
-  const scroll = document.getElementById("media-scroll");
-  if (!scroll) return;
-
-  const embedUrl = buildYoutubeEmbedUrl(videoId, true);
-
-  mediaState.videoId = videoId;
-  mediaState.title = title || "UNTITLED";
-  mediaState.mode = mode || "video";
-  mediaState.url = embedUrl;
-
-  scroll.innerHTML = `
-    <div class="media-card">
-      <b>${escapeAttr(mediaState.title)}</b><br>
-      MODE: ${(mediaState.mode || "video").toUpperCase()}
-    </div>
-
-    <div class="media-frame-wrap">
-      <iframe
-        class="media-frame"
-        src="${embedUrl}"
-        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-        allowfullscreen
-        referrerpolicy="strict-origin-when-cross-origin"
-      ></iframe>
-    </div>
-
-    <div class="media-card">
-      USE: stop media, close media, exit media, youtube history.
-    </div>
-  `;
-
-  setMediaStatus(`MEDIA ACTIVE: ${mediaState.title}`);
-}
-
-  function renderMediaResults(results, mode) {
-    openMediaShell();
-    const scroll = document.getElementById("media-scroll");
-    if (!scroll) return;
-
-    if (!results || !results.length) {
-      scroll.innerHTML = `<div class="media-card">NO MEDIA RESULTS FOUND.</div>`;
-      setMediaStatus("MEDIA SEARCH FAILED");
-      return;
-    }
-
-    scroll.innerHTML = `
-      <div class="media-card">SELECT TARGET. MODE: ${(mode || "video").toUpperCase()}</div>
-      <div class="media-grid">
-        ${results.map(result => `
-          <div class="media-result" onclick="openMediaByVideoId('${String(result.videoId).replace(/'/g, "\\'")}', '${String(result.title || "").replace(/'/g, "\\'")}', '${mode || "video"}')">
-            <img class="media-thumb" src="${result.thumb || ""}" alt="">
-            <div class="media-result-title">${result.title || "UNTITLED"}</div>
-            <div class="media-result-meta">${result.channel || "UNKNOWN CHANNEL"}${result.meta ? `<br>${result.meta}` : ""}</div>
-          </div>
-        `).join("")}
-      </div>
-    `;
-    setMediaStatus(`MEDIA RESULTS: ${results.length}`);
   }
 
   function buildYoutubeEmbedUrl(videoId, autoplay = true) {
@@ -3192,6 +3148,7 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
     });
     return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
   }
+
   function extractYouTubeVideoId(input) {
     const raw = String(input || "").trim();
     if (!raw) return "";
@@ -3257,6 +3214,66 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
     return String(str || "")
       .replace(/\\/g, "\\\\")
       .replace(/'/g, "\\'");
+  }
+
+  function renderMediaFrame(videoId, title, mode) {
+    openMediaShell();
+    const scroll = document.getElementById("media-scroll");
+    if (!scroll) return;
+
+    const embedUrl = buildYoutubeEmbedUrl(videoId, true);
+
+    mediaState.videoId = videoId;
+    mediaState.title = title || "UNTITLED";
+    mediaState.mode = mode || "video";
+    mediaState.url = embedUrl;
+
+    scroll.innerHTML = `
+      <div class="media-card">
+        <b>${escapeAttr(mediaState.title)}</b><br>
+        MODE: ${(mediaState.mode || "video").toUpperCase()}
+      </div>
+      <div class="media-frame-wrap">
+        <iframe
+          class="media-frame"
+          src="${embedUrl}"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
+      </div>
+      <div class="media-card">
+        USE: stop media, close media, exit media, youtube history.
+      </div>
+    `;
+
+    setMediaStatus(`MEDIA ACTIVE: ${mediaState.title}`);
+  }
+
+  function renderMediaResults(results, mode) {
+    openMediaShell();
+    const scroll = document.getElementById("media-scroll");
+    if (!scroll) return;
+
+    if (!results || !results.length) {
+      scroll.innerHTML = `<div class="media-card">NO MEDIA RESULTS FOUND.</div>`;
+      setMediaStatus("MEDIA SEARCH FAILED");
+      return;
+    }
+
+    scroll.innerHTML = `
+      <div class="media-card">SELECT TARGET. MODE: ${(mode || "video").toUpperCase()}</div>
+      <div class="media-grid">
+        ${results.map(result => `
+          <div class="media-result" onclick="openMediaByVideoId('${escapeInlineJS(result.videoId)}', '${escapeInlineJS(result.title || "")}', '${escapeInlineJS(mode || "video")}')">
+            <img class="media-thumb" src="${escapeAttr(result.thumb || "")}" alt="">
+            <div class="media-result-title">${escapeAttr(result.title || "UNTITLED")}</div>
+            <div class="media-result-meta">${escapeAttr(result.channel || "UNKNOWN CHANNEL")}${result.meta ? `<br>${escapeAttr(result.meta)}` : ""}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    setMediaStatus(`MEDIA RESULTS: ${results.length}`);
   }
 
   function renderNoApiMediaSearch(query, mode = "video") {
@@ -3363,15 +3380,22 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
       return;
     }
 
+    renderMediaResults(results, mode);
+    addMsg(`MEDIA RESULTS READY: ${cleanQuery.toUpperCase()}`, "bot");
+    talk("Media results ready.");
+  }
+
   function openMediaByVideoId(videoId, title = "", mode = "video") {
-    const cleanId = String(videoId || "").trim();
-    if (!cleanId) {
+    const raw = String(videoId || "").trim();
+    if (!raw) {
       addMsg("INVALID VIDEO TARGET.", "bot");
       return;
     }
 
-    if (cleanId.includes(" ") || cleanId.length > 20 && !/^[\w-]+$/.test(cleanId)) {
-      openMediaByQuery(cleanId, mode);
+    const cleanId = extractYouTubeVideoId(raw) || (/^[a-zA-Z0-9_-]{11}$/.test(raw) ? raw : "");
+
+    if (!cleanId) {
+      openMediaByQuery(raw, mode);
       return;
     }
 
@@ -3405,10 +3429,10 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
       <div class="media-card"><b>YOUTUBE HISTORY</b></div>
       <div class="media-grid">
         ${history.map(item => `
-          <div class="media-result" onclick="openMediaByVideoId('${String(item.videoId).replace(/'/g, "\\'")}', '${String(item.title || "").replace(/'/g, "\\'")}', '${item.mode || "video"}')">
+          <div class="media-result" onclick="openMediaByVideoId('${escapeInlineJS(item.videoId)}', '${escapeInlineJS(item.title || "")}', '${escapeInlineJS(item.mode || "video")}')">
             <img class="media-thumb" src="https://i.ytimg.com/vi/${encodeURIComponent(item.videoId)}/hqdefault.jpg" alt="">
-            <div class="media-result-title">${item.title || "UNTITLED"}</div>
-            <div class="media-result-meta">${(item.mode || "video").toUpperCase()}<br>${item.ts ? new Date(item.ts).toLocaleString() : ""}</div>
+            <div class="media-result-title">${escapeAttr(item.title || "UNTITLED")}</div>
+            <div class="media-result-meta">${escapeAttr((item.mode || "video").toUpperCase())}<br>${item.ts ? escapeAttr(new Date(item.ts).toLocaleString()) : ""}</div>
           </div>
         `).join("")}
       </div>
@@ -3418,7 +3442,7 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
   }
 
   function getOnlineOfflineCapabilities() {
-    return `<b>OFFLINE MODE</b><br>
+  return `<b>OFFLINE MODE</b><br>
 help = PANIC MODE ON<br>
 clear = PANIC MODE OFF<br>
 lock mode<br>
@@ -3503,6 +3527,9 @@ route [start] to [end]<br>
 bible [verse]<br>
 play [query]<br>
 music [query]<br>
+yt [youtube link, id, or search]<br>
+youtube [youtube link, id, or search]<br>
+watch [youtube link, id, or search]<br>
 set youtube key<br>
 clear youtube key<br>
 youtube history<br>
@@ -3557,873 +3584,853 @@ clear fireworks key<br>
 clear cloudflare key<br>
 clear api<br>
 clear api all`;
-  }
+}
 
-  async function getCoords() {
-    if (!navigator.geolocation) return "COORDINATES UNAVAILABLE.";
-    return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          resolve(`COORDINATES:<br>LAT: ${pos.coords.latitude.toFixed(6)}<br>LON: ${pos.coords.longitude.toFixed(6)}<br>ACC: ${Math.round(pos.coords.accuracy)}m`);
-        },
-        () => resolve("COORDINATE LOCK FAILED."),
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      );
-    });
-  }
+async function getCoords() {
+  if (!navigator.geolocation) return "COORDINATES UNAVAILABLE.";
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        resolve(`COORDINATES:<br>LAT: ${pos.coords.latitude.toFixed(6)}<br>LON: ${pos.coords.longitude.toFixed(6)}<br>ACC: ${Math.round(pos.coords.accuracy)}m`);
+      },
+      () => resolve("COORDINATE LOCK FAILED."),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    );
+  });
+}
 
-  function buildProviderRow(provider) {
-    provider = normalizeProviderName(provider);
-    const isActive =
-      (backendMode === provider) ||
-      (backendMode === "auto" && !window.heavyBrain && normalizeProviderName(selectedProvider) === provider);
+function buildProviderRow(provider) {
+  provider = normalizeProviderName(provider);
+  const isActive =
+    (backendMode === provider) ||
+    (backendMode === "auto" && !window.heavyBrain && normalizeProviderName(selectedProvider) === provider);
 
-    const hasKey = providerHasKey(provider);
+  const hasKey = providerHasKey(provider);
 
-    let actionGrid = `
+  let actionGrid = `
+    <div class="system-inline-grid">
+      <button class="uplink-btn" onclick="useProvider('${provider}')">USE</button>
+      <button class="uplink-btn" onclick="setProviderKeyUI('${provider}')">${provider === "ollama" ? "SET MODEL" : "SET KEY"}</button>
+      <button class="uplink-btn" onclick="clearProviderKeyUI('${provider}')">CLEAR</button>
+    </div>
+  `;
+
+  if (provider === "cloudflare") {
+    actionGrid = `
       <div class="system-inline-grid">
         <button class="uplink-btn" onclick="useProvider('${provider}')">USE</button>
-        <button class="uplink-btn" onclick="setProviderKeyUI('${provider}')">${provider === "ollama" ? "SET MODEL" : "SET KEY"}</button>
+        <button class="uplink-btn" onclick="setProviderKeyUI('${provider}')">SET KEY+ID</button>
         <button class="uplink-btn" onclick="clearProviderKeyUI('${provider}')">CLEAR</button>
       </div>
     `;
+  }
 
-    if (provider === "cloudflare") {
-      actionGrid = `
-        <div class="system-inline-grid">
-          <button class="uplink-btn" onclick="useProvider('${provider}')">USE</button>
-          <button class="uplink-btn" onclick="setProviderKeyUI('${provider}')">SET KEY+ID</button>
-          <button class="uplink-btn" onclick="clearProviderKeyUI('${provider}')">CLEAR</button>
-        </div>
-      `;
-    }
-
-    if (provider === "ollama") {
-      actionGrid = `
-        <div class="system-inline-grid">
-          <button class="uplink-btn" onclick="useProvider('ollama')">USE</button>
-          <button class="uplink-btn" onclick="setProviderKeyUI('ollama')">SET MODEL</button>
-          <button class="uplink-btn" onclick="addMsg('OLLAMA REQUIRES A LOCAL SERVER ON http://localhost:11434', 'bot')">INFO</button>
-        </div>
-      `;
-    }
-
-    return `
-      <div class="system-provider-row">
-        <div class="system-provider-title">${getProviderLabel(provider)}</div>
-        <div class="system-provider-meta">
-          STATUS: ${isActive ? "ACTIVE" : "IDLE"}<br>
-          ${provider === "web"
-            ? (window.heavyBrain ? "STATE: MOUNTED" : "STATE: NOT MOUNTED")
-            : provider === "ollama"
-              ? "STATE: LOCAL"
-              : provider === "cloudflare"
-                ? (hasKey ? "KEY+ACCOUNT: LOADED" : "KEY OR ACCOUNT: EMPTY")
-                : (hasKey ? "KEY: LOADED" : "KEY: EMPTY")
-          }<br>
-          ${getProviderMetaExtra(provider)}
-        </div>
-        ${actionGrid}
+  if (provider === "ollama") {
+    actionGrid = `
+      <div class="system-inline-grid">
+        <button class="uplink-btn" onclick="useProvider('ollama')">USE</button>
+        <button class="uplink-btn" onclick="setProviderKeyUI('ollama')">SET MODEL</button>
+        <button class="uplink-btn" onclick="addMsg('OLLAMA REQUIRES A LOCAL SERVER ON http://localhost:11434', 'bot')">INFO</button>
       </div>
     `;
   }
 
-  function renderProviderGroup(title, providers, openByDefault = false, folderId = "") {
-    return `
+  return `
+    <div class="system-provider-row">
+      <div class="system-provider-title">${getProviderLabel(provider)}</div>
+      <div class="system-provider-meta">
+        STATUS: ${isActive ? "ACTIVE" : "IDLE"}<br>
+        ${provider === "web"
+          ? (window.heavyBrain ? "STATE: MOUNTED" : "STATE: NOT MOUNTED")
+          : provider === "ollama"
+            ? "STATE: LOCAL"
+            : provider === "cloudflare"
+              ? (hasKey ? "KEY+ACCOUNT: LOADED" : "KEY OR ACCOUNT: EMPTY")
+              : (hasKey ? "KEY: LOADED" : "KEY: EMPTY")
+        }<br>
+        ${getProviderMetaExtra(provider)}
+      </div>
+      ${actionGrid}
+    </div>
+  `;
+}
+
+function renderProviderGroup(title, providers, openByDefault = false, folderId = "") {
+  return `
+    <div class="system-folder">
+      <div class="system-folder-header" onclick="toggleSection('${folderId}')">
+        ${title}
+      </div>
+      <div class="system-folder-body" id="${folderId}" style="${openByDefault ? "display:block;" : ""}">
+        ${providers.map(buildProviderRow).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function systemHeuristicsHTML() {
+  const autoRow = `
+    <div class="system-provider-row">
+      <div class="system-provider-title">AUTO</div>
+      <div class="system-provider-meta">
+        STATUS: ${backendMode === "auto" ? "ACTIVE" : "IDLE"}<br>
+        ROUTE: ${window.heavyBrain ? "WEBLLM FIRST" : "SELECTED PROVIDER"}
+      </div>
+      <div class="system-btn-grid">
+        <button class="uplink-btn" onclick="setBackend('auto')">USE AUTO</button>
+      </div>
+    </div>
+  `;
+
+  const webRow = `
+    <div class="system-provider-row">
+      <div class="system-provider-title">WEBLLM</div>
+      <div class="system-provider-meta">
+        STATUS: ${(backendMode === "web" || (backendMode === "auto" && window.heavyBrain)) ? "ACTIVE" : "IDLE"}<br>
+        STATE: ${window.heavyBrain ? "MOUNTED" : "NOT MOUNTED"}<br>
+        BACKEND: LOCAL WEBGPU
+      </div>
+      <div class="system-inline-grid">
+        <button class="uplink-btn" onclick="setBackend('web')">USE</button>
+        <button class="uplink-btn" onclick="syncHeavyBrain()">MOUNT</button>
+        <button class="uplink-btn" onclick="purgeHeavyBrain()">PURGE</button>
+      </div>
+    </div>
+  `;
+
+  const ollamaRow = buildProviderRow("ollama");
+  const youtubeRow = `
+    <div class="system-provider-row">
+      <div class="system-provider-title">YOUTUBE / MEDIA BAY</div>
+      <div class="system-provider-meta">
+        YOUTUBE KEY: ${getYouTubeApiKey() ? "LOADED" : "EMPTY"}<br>
+        MEDIA STATE: ${mediaState.open ? "OPEN" : "CLOSED"}<br>
+        HISTORY: ${getYoutubeHistory().length} ITEM(S)
+      </div>
+      <div class="system-inline-grid">
+        <button class="uplink-btn" onclick="setYouTubeApiKey(); if (activeSlot === 11) renderSystemPanel();">SET KEY</button>
+        <button class="uplink-btn" onclick="openYoutubeHistoryPanel()">HISTORY</button>
+        <button class="uplink-btn" onclick="clearYouTubeApiKey()">CLEAR</button>
+      </div>
+      <div class="system-btn-grid">
+        <button class="uplink-btn" onclick="renderMediaHome()">OPEN MEDIA BAY</button>
+      </div>
+    </div>
+  `;
+
+  return `
+    <div class="system-card">
+      <b>[ OKATAN SYSTEM PANEL ]</b><br><br>
+      SPECTRUM: ${isOffline ? "OFFLINE (GREEN)" : "CLOUD (CYAN)"}<br>
+      BACKEND: ${getProviderLabel(backendMode)}<br>
+      CORE: ${isOffline ? "UTILITY MODE" : (backendMode === "web" ? "WEBLLM LOCAL" : (selectedProvider ? `${getProviderLabel(selectedProvider)} LINK` : "NO AI LINK"))}<br>
+      ACTIVE PROVIDER: ${selectedProvider ? getProviderLabel(selectedProvider) : "NONE"}<br>
+      LOCAL CORE: ${window.heavyBrain ? "MOUNTED" : "NOT MOUNTED"}<br>
+      MINIMAL: ${minimalMode ? "ON" : "OFF"}<br>
+      VOICE MODE: ${voiceMode ? "ON" : "OFF"}<br>
+      MEDIA BAY: ${mediaState.open ? "OPEN" : "CLOSED"}<br>
+
       <div class="system-folder">
-        <div class="system-folder-header" onclick="toggleSection('${folderId}')">
-          ${title}
+        <div class="system-folder-header" onclick="toggleSection('providers-main-folder')">
+          AI PROVIDERS
         </div>
-        <div class="system-folder-body" id="${folderId}" style="${openByDefault ? "display:block;" : ""}">
-          ${providers.map(buildProviderRow).join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  function systemHeuristicsHTML() {
-    const autoRow = `
-      <div class="system-provider-row">
-        <div class="system-provider-title">AUTO</div>
-        <div class="system-provider-meta">
-          STATUS: ${backendMode === "auto" ? "ACTIVE" : "IDLE"}<br>
-          ROUTE: ${window.heavyBrain ? "WEBLLM FIRST" : "SELECTED PROVIDER"}
-        </div>
-        <div class="system-btn-grid">
-          <button class="uplink-btn" onclick="setBackend('auto')">USE AUTO</button>
+        <div class="system-folder-body" id="providers-main-folder" style="display:block;">
+          ${autoRow}
+          ${renderProviderGroup("COMMON CLOUD", PROVIDER_GROUPS.common, true, "common-cloud-folder")}
+          ${renderProviderGroup("EXTENDED / SECONDARY", PROVIDER_GROUPS.extended, false, "extended-cloud-folder")}
+          ${renderProviderGroup("ADVANCED / INFRA", PROVIDER_GROUPS.infra, false, "infra-cloud-folder")}
         </div>
       </div>
-    `;
 
-    const webRow = `
-      <div class="system-provider-row">
-        <div class="system-provider-title">WEBLLM</div>
-        <div class="system-provider-meta">
-          STATUS: ${(backendMode === "web" || (backendMode === "auto" && window.heavyBrain)) ? "ACTIVE" : "IDLE"}<br>
-          STATE: ${window.heavyBrain ? "MOUNTED" : "NOT MOUNTED"}<br>
-          BACKEND: LOCAL WEBGPU
+      <div class="system-folder">
+        <div class="system-folder-header" onclick="toggleSection('mlc-folder')">
+          LOCAL AI
         </div>
-        <div class="system-inline-grid">
-          <button class="uplink-btn" onclick="setBackend('web')">USE</button>
-          <button class="uplink-btn" onclick="syncHeavyBrain()">MOUNT</button>
-          <button class="uplink-btn" onclick="purgeHeavyBrain()">PURGE</button>
-        </div>
-      </div>
-    `;
-
-    const ollamaRow = buildProviderRow("ollama");
-    const youtubeRow = `
-      <div class="system-provider-row">
-        <div class="system-provider-title">YOUTUBE / MEDIA BAY</div>
-        <div class="system-provider-meta">
-          YOUTUBE KEY: ${getYouTubeApiKey() ? "LOADED" : "EMPTY"}<br>
-          MEDIA STATE: ${mediaState.open ? "OPEN" : "CLOSED"}<br>
-          HISTORY: ${getYoutubeHistory().length} ITEM(S)
-        </div>
-        <div class="system-inline-grid">
-          <button class="uplink-btn" onclick="setYouTubeApiKey(); if (activeSlot === 11) renderSystemPanel();">SET KEY</button>
-          <button class="uplink-btn" onclick="openYoutubeHistoryPanel()">HISTORY</button>
-          <button class="uplink-btn" onclick="clearYouTubeApiKey()">CLEAR</button>
-        </div>
-        <div class="system-btn-grid">
-          <button class="uplink-btn" onclick="renderMediaHome()">OPEN MEDIA BAY</button>
-        </div>
-      </div>
-    `;
-
-    return `
-      <div class="system-card">
-        <b>[ OKATAN SYSTEM PANEL ]</b><br><br>
-        SPECTRUM: ${isOffline ? "OFFLINE (GREEN)" : "CLOUD (CYAN)"}<br>
-        BACKEND: ${getProviderLabel(backendMode)}<br>
-        CORE: ${isOffline ? "UTILITY MODE" : (backendMode === "web" ? "WEBLLM LOCAL" : (selectedProvider ? `${getProviderLabel(selectedProvider)} LINK` : "NO AI LINK"))}<br>
-        ACTIVE PROVIDER: ${selectedProvider ? getProviderLabel(selectedProvider) : "NONE"}<br>
-        LOCAL CORE: ${window.heavyBrain ? "MOUNTED" : "NOT MOUNTED"}<br>
-        MINIMAL: ${minimalMode ? "ON" : "OFF"}<br>
-        VOICE MODE: ${voiceMode ? "ON" : "OFF"}<br>
-        MEDIA BAY: ${mediaState.open ? "OPEN" : "CLOSED"}<br>
-
-        <div class="system-folder">
-          <div class="system-folder-header" onclick="toggleSection('providers-main-folder')">
-            AI PROVIDERS
-          </div>
-          <div class="system-folder-body" id="providers-main-folder" style="display:block;">
-            ${autoRow}
-            ${renderProviderGroup("COMMON CLOUD", PROVIDER_GROUPS.common, true, "common-cloud-folder")}
-            ${renderProviderGroup("EXTENDED / SECONDARY", PROVIDER_GROUPS.extended, false, "extended-cloud-folder")}
-            ${renderProviderGroup("ADVANCED / INFRA", PROVIDER_GROUPS.infra, false, "infra-cloud-folder")}
-          </div>
-        </div>
-
-        <div class="system-folder">
-          <div class="system-folder-header" onclick="toggleSection('mlc-folder')">
-            LOCAL AI
-          </div>
-          <div class="system-folder-body" id="mlc-folder">
-            <div class="system-provider-row">
-              <div class="system-provider-title">MLC LOCAL EXTENSION</div>
-              <div class="system-provider-meta">
-                APK HOST: GOOGLE DRIVE<br>
-                INSTALL: MANUAL<br>
-                OPEN METHOD: ANDROID INTENT<br>
-                BRAIN LOAD: CLIPBOARD COPY
-              </div>
-              <div class="system-btn-grid">
-                <button class="uplink-btn" onclick="downloadAPK()">DOWNLOAD MLC APK</button>
-                <button class="uplink-btn" onclick="openMLC()">OPEN MLC</button>
-                <button class="uplink-btn" onclick="copyBrain()">COPY BRAIN</button>
-                <button class="uplink-btn" onclick="openMLCWithBrain()">COPY BRAIN + OPEN MLC</button>
-              </div>
+        <div class="system-folder-body" id="mlc-folder">
+          <div class="system-provider-row">
+            <div class="system-provider-title">MLC LOCAL EXTENSION</div>
+            <div class="system-provider-meta">
+              APK HOST: GOOGLE DRIVE<br>
+              INSTALL: MANUAL<br>
+              OPEN METHOD: ANDROID INTENT<br>
+              BRAIN LOAD: CLIPBOARD COPY
             </div>
-
-            ${webRow}
-            ${ollamaRow}
-          </div>
-        </div>
-
-        <div class="system-folder">
-          <div class="system-folder-header" onclick="toggleSection('media-folder')">
-            MEDIA BAY
-          </div>
-          <div class="system-folder-body" id="media-folder">
-            ${youtubeRow}
-          </div>
-        </div>
-
-        <div class="system-folder">
-          <div class="system-folder-header" onclick="toggleSection('system-controls-folder')">
-            SYSTEM CONTROLS
-          </div>
-          <div class="system-folder-body" id="system-controls-folder">
             <div class="system-btn-grid">
-              <button class="uplink-btn" onclick="toggleSpectrum()">TOGGLE MODE</button>
-              <button class="uplink-btn" onclick="showSystemInfo('capabilities')">VIEW CAPABILITIES</button>
-              <button class="uplink-btn" onclick="showSystemInfo('status')">STATUS</button>
-              <button class="uplink-btn" onclick="showSystemInfo('device')">DEVICE</button>
-              <button class="uplink-btn" onclick="showSystemInfo('screen')">SCREEN</button>
-              <button class="uplink-btn" onclick="showSystemInfo('system')">SYSTEM</button>
-              <button class="uplink-btn" onclick="clearCurrentProviderKey()">CLEAR CURRENT PROVIDER KEY</button>
-              <button class="uplink-btn" onclick="clearAllProviderKeysUI()">CLEAR ALL KEYS</button>
-              <button class="uplink-btn" onclick="location.reload()">REBOOT</button>
+              <button class="uplink-btn" onclick="downloadAPK()">DOWNLOAD MLC APK</button>
+              <button class="uplink-btn" onclick="openMLC()">OPEN MLC</button>
+              <button class="uplink-btn" onclick="copyBrain()">COPY BRAIN</button>
+              <button class="uplink-btn" onclick="openMLCWithBrain()">COPY BRAIN + OPEN MLC</button>
             </div>
+          </div>
+
+          ${webRow}
+          ${ollamaRow}
+        </div>
+      </div>
+
+      <div class="system-folder">
+        <div class="system-folder-header" onclick="toggleSection('media-folder')">
+          MEDIA BAY
+        </div>
+        <div class="system-folder-body" id="media-folder">
+          ${youtubeRow}
+        </div>
+      </div>
+
+      <div class="system-folder">
+        <div class="system-folder-header" onclick="toggleSection('system-controls-folder')">
+          SYSTEM CONTROLS
+        </div>
+        <div class="system-folder-body" id="system-controls-folder">
+          <div class="system-btn-grid">
+            <button class="uplink-btn" onclick="toggleSpectrum()">TOGGLE MODE</button>
+            <button class="uplink-btn" onclick="showSystemInfo('capabilities')">VIEW CAPABILITIES</button>
+            <button class="uplink-btn" onclick="showSystemInfo('status')">STATUS</button>
+            <button class="uplink-btn" onclick="showSystemInfo('device')">DEVICE</button>
+            <button class="uplink-btn" onclick="showSystemInfo('screen')">SCREEN</button>
+            <button class="uplink-btn" onclick="showSystemInfo('system')">SYSTEM</button>
+            <button class="uplink-btn" onclick="clearCurrentProviderKey()">CLEAR CURRENT PROVIDER KEY</button>
+            <button class="uplink-btn" onclick="clearAllProviderKeysUI()">CLEAR ALL KEYS</button>
+            <button class="uplink-btn" onclick="location.reload()">REBOOT</button>
           </div>
         </div>
       </div>
-    `;
+    </div>
+  `;
+}
+
+function renderSystemPanel(detailHTML = "") {
+  const visor = document.getElementById("visor");
+  visor.innerHTML = "";
+
+  const top = document.createElement("div");
+  top.className = "msg bot";
+  top.innerHTML = systemHeuristicsHTML();
+  visor.appendChild(top);
+
+  if (detailHTML) {
+    const detail = document.createElement("div");
+    detail.className = "msg bot";
+    detail.innerHTML = `<div class="system-card">${detailHTML}</div>`;
+    visor.appendChild(detail);
   }
 
-  function renderSystemPanel(detailHTML = "") {
-    const visor = document.getElementById("visor");
-    visor.innerHTML = "";
+  visor.scrollTop = visor.scrollHeight;
+}
 
-    const top = document.createElement("div");
-    top.className = "msg bot";
-    top.innerHTML = systemHeuristicsHTML();
-    visor.appendChild(top);
+function showSystemInfo(type) {
+  if (activeSlot !== 11) return;
 
-    if (detailHTML) {
-      const detail = document.createElement("div");
-      detail.className = "msg bot";
-      detail.innerHTML = `<div class="system-card">${detailHTML}</div>`;
-      visor.appendChild(detail);
-    }
+  let html = "";
+  if (type === "capabilities") html = getOnlineOfflineCapabilities();
+  else if (type === "status") html = getStatusSummary();
+  else if (type === "device") html = getDeviceOnlySummary();
+  else if (type === "screen") html = getScreenSummary();
+  else if (type === "system") html = getSystemSummary();
 
-    visor.scrollTop = visor.scrollHeight;
+  renderSystemPanel(html);
+}
+
+async function offlineCommand(raw) {
+  const val = raw.trim();
+  const low = val.toLowerCase();
+
+  if (LOCAL_LAUNCH_COMMANDS.includes(low)) {
+    await launchLocalCoreWithBrain();
+    return "MLC LAUNCH REQUEST SENT. BRAIN COPIED.";
   }
 
-  function showSystemInfo(type) {
-    if (activeSlot !== 11) return;
-
-    let html = "";
-    if (type === "capabilities") html = getOnlineOfflineCapabilities();
-    else if (type === "status") html = getStatusSummary();
-    else if (type === "device") html = getDeviceOnlySummary();
-    else if (type === "screen") html = getScreenSummary();
-    else if (type === "system") html = getSystemSummary();
-
-    renderSystemPanel(html);
+  if (low === "download mlc apk") {
+    downloadAPK();
+    return "MLC APK DOWNLOAD OPENED.";
   }
 
-  async function offlineCommand(raw) {
-    const val = raw.trim();
-    const low = val.toLowerCase();
-
-    if (LOCAL_LAUNCH_COMMANDS.includes(low)) {
-      await launchLocalCoreWithBrain();
-      return "MLC LAUNCH REQUEST SENT. BRAIN COPIED.";
-    }
-
-    if (low === "download mlc apk") {
-      downloadAPK();
-      return "MLC APK DOWNLOAD OPENED.";
-    }
-
-    if (low === "copy brain") {
-      await copyBrain();
-      return "BRAIN COPY ATTEMPTED.";
-    }
-
-    if (low === "help" || low === "offline help" || low === "capabilities" || low === "modes") {
-      return getOnlineOfflineCapabilities();
-    }
-
-    if (low === "status") return getStatusSummary();
-    if (low === "device") return getDeviceOnlySummary();
-    if (low === "screen") return getScreenSummary();
-    if (low === "system") return getSystemSummary();
-    if (low === "date") return `DATE: <b>${new Date().toLocaleDateString()}</b>`;
-    if (low === "time") return `TIME: <b>${new Date().toLocaleTimeString()}</b>`;
-    if (low === "session") return getSessionSummary();
-    if (low === "archives") return getArchiveSummary();
-    if (low === "battery") return await getBatteryStatus();
-    if (low === "coords" || low === "coordinates") return await getCoords();
-    if (low === "compass") return await getCompassReading();
-
-    if (low.startsWith("note ")) {
-      const note = val.slice(5).trim();
-      if (!note) return "EMPTY NOTE.";
-      const notes = getNotes();
-      notes.push(note);
-      saveNotes(notes);
-      return "NOTE STORED.";
-    }
-
-    if (low === "notes") return formatList(getNotes(), "STORED NOTES");
-
-    if (low === "clear notes") {
-      saveNotes([]);
-      return "NOTES PURGED.";
-    }
-
-    if (low.startsWith("remember ")) return addMemory(val.slice(9));
-    if (low === "recall" || low === "memory") return getMemorySummary();
-
-    if (low.startsWith("forget ")) {
-      const arg = low.slice(7).trim();
-      if (arg === "all") return forgetAllMemory();
-      const idx = parseInt(arg, 10) - 1;
-      if (!Number.isFinite(idx)) return "USE: forget 1 OR forget all";
-      return forgetMemory(idx);
-    }
-
-    if (low === "forget all") return forgetAllMemory();
-
-    if (low.startsWith("task add ")) return addTask(val.slice(9));
-    if (low === "task list" || low === "tasks") return getTaskList();
-    if (low.startsWith("task done ")) {
-      const idx = parseInt(val.slice(10).trim(), 10) - 1;
-      return completeTask(idx);
-    }
-    if (low === "task clear" || low === "clear tasks") return clearTasks();
-
-    if (low.startsWith("check add ")) return addChecklistItem(val.slice(10));
-    if (low === "check list" || low === "checklist") return getChecklistSummary();
-    if (low.startsWith("check done ")) {
-      const idx = parseInt(val.slice(11).trim(), 10) - 1;
-      if (!Number.isFinite(idx)) return "USE: check done 1";
-      return completeChecklistItem(idx);
-    }
-    if (low === "check clear" || low === "clear checklist") return clearChecklist();
-
-    if (low === "flip coin") return flipCoin();
-
-    if (low === "roll die" || low === "roll dice") return rollDie(6);
-    if (low.startsWith("roll d")) {
-      const sides = parseInt(low.slice(6), 10);
-      return rollDie(sides);
-    }
-
-    if (low === "choose letter") return chooseLetter();
-    if (low.startsWith("choose letter ")) {
-      const parts = low.split(/\s+/);
-      if (parts.length === 4) return chooseLetterRange(parts[2], parts[3]);
-      return chooseLetter();
-    }
-
-    if (low.startsWith("choose number ")) {
-      const parts = low.split(/\s+/);
-      if (parts.length >= 4) {
-        const min = parseInt(parts[2], 10);
-        const max = parseInt(parts[3], 10);
-        return chooseNumberBetween(min, max);
-      }
-      return "USE: choose number 1 50";
-    }
-
-    if (low.startsWith("choose a number between ")) {
-      const match = low.match(/^choose a number between\s+(-?\d+)\s+and\s+(-?\d+)$/);
-      if (match) {
-        return chooseNumberBetween(parseInt(match[1], 10), parseInt(match[2], 10));
-      }
-      return "USE: choose a number between 1 and 50";
-    }
-
-    if (low === "stopwatch start") return startStopwatch();
-    if (low === "stopwatch stop") return stopStopwatch();
-    if (low === "stopwatch reset") return resetStopwatch();
-    if (low === "stopwatch status") return stopwatchStatus();
-
-    if (low === "countdown stop") return stopCountdown();
-    if (low === "countdown status") return countdownStatus();
-    if (low.startsWith("countdown ")) {
-      const seconds = parseCountdownInput(val.slice(10));
-      if (!Number.isFinite(seconds)) return "USE: countdown 5m OR countdown 300 OR countdown 05:00";
-      return startCountdown(seconds);
-    }
-
-    if (low === "alarm stop") return stopAlarm();
-    if (low === "alarm status") return getAlarmStatus();
-    if (low.startsWith("alarm ")) {
-      const alarmVal = val.slice(6).trim().toLowerCase();
-
-      const timeMatch = alarmVal.match(/^(\d{1,2}):(\d{2})$/);
-      if (timeMatch) return setAlarmAt(timeMatch[1], timeMatch[2]);
-
-      const seconds = parseCountdownInput(alarmVal);
-      if (Number.isFinite(seconds)) return setAlarmFromNow(seconds);
-
-      return "USE: alarm 5m OR alarm 07:30";
-    }
-
-    if (low === "reminders") return getRemindersSummary();
-    if (low === "clear reminders") return clearReminders();
-
-    if (low.startsWith("remind me in ")) {
-      const m = val.match(/^remind me in\s+(.+?)\s+(.+)$/i);
-      if (!m) return "USE: remind me in 15m take laundry out";
-      const seconds = parseCountdownInput(m[1]);
-      if (!Number.isFinite(seconds)) return "INVALID REMINDER TIME.";
-      return setReminderIn(seconds, m[2]);
-    }
-
-    if (low.startsWith("remind me at ")) {
-      const m = val.match(/^remind me at\s+(\d{1,2}):(\d{2})\s+(.+)$/i);
-      if (!m) return "USE: remind me at 19:30 call mom";
-      return setReminderAt(m[1], m[2], m[3]);
-    }
-
-    if (low === "flashlight on") return await flashlightOn();
-    if (low === "flashlight off") return await flashlightOff();
-
-    if (low === "minimal on") {
-      applyMinimalMode(true);
-      return "MINIMAL MODE ON.";
-    }
-
-    if (low === "minimal off") {
-      applyMinimalMode(false);
-      return "MINIMAL MODE OFF.";
-    }
-
-    if (low === "youtube history") {
-      const history = getYoutubeHistory();
-      if (!history.length) return "YOUTUBE HISTORY: EMPTY.";
-      return `<b>YOUTUBE HISTORY</b><br>` + history.map((item, idx) => {
-        const safeTitle = String(item.title || "UNTITLED").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const safeMode = String(item.mode || "video").toUpperCase();
-        const safeId = String(item.videoId || "");
-        return `${idx + 1}. ${safeTitle} [${safeMode}]<br><button class="uplink-btn" onclick="openMediaByVideoId('${safeId}','${safeTitle.replace(/'/g, "\\'")}','${item.mode || "video"}')">REOPEN</button>`;
-      }).join("<br>");
-    }
-
-    if (low.startsWith("play ")) {
-      if (isOffline) return offlineBlocked("media");
-      await openMediaByQuery(val.slice(5).trim(), "video");
-      return "";
-    }
-
-    if (low.startsWith("music ")) {
-      if (isOffline) return offlineBlocked("media");
-      await openMediaByQuery(val.slice(6).trim(), "music");
-      return "";
-    }
-
-    if (low === "stop media" || low === "stop video") {
-      stopMedia(true);
-      return "";
-    }
-
-    if (
-      low === "close media" ||
-      low === "close video" ||
-      low === "exit media" ||
-      low === "exit video"
-    ) {
-      closeMedia(true);
-      return "";
-    }
-
-    if (/^[0-9+\-*/().\s×÷]+$/.test(val) && /[+\-*/×÷]/.test(val)) {
-      try {
-        return `RESULT: <b>${Function(`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})`)()}</b>`;
-      } catch {
-        return "CALC ERROR.";
-      }
-    }
-
-    if (low.startsWith("calc ")) {
-      const expr = val.slice(5).trim().replace(/×/g, "*").replace(/÷/g, "/");
-      if (!/^[0-9+\-*/().\s]+$/.test(expr)) return "INVALID CALC INPUT.";
-      try {
-        return `RESULT: <b>${Function(`"use strict"; return (${expr})`)()}</b>`;
-      } catch {
-        return "CALC ERROR.";
-      }
-    }
-
-    return "OFFLINE MODE ACTIVE. USE 'capabilities' TO VIEW ONLINE/OFFLINE COMMANDS.";
+  if (low === "copy brain") {
+    await copyBrain();
+    return "BRAIN COPY ATTEMPTED.";
   }
 
-  function lockMode() {
-    authenticated = false;
-    sessionStorage.removeItem("ok_auth");
+  if (low === "help" || low === "offline help" || low === "capabilities" || low === "modes") {
+    return getOnlineOfflineCapabilities();
+  }
 
-    const i = document.getElementById("in");
-    const visor = document.getElementById("visor");
-    const menu = document.getElementById("menu");
+  if (low === "status") return getStatusSummary();
+  if (low === "device") return getDeviceOnlySummary();
+  if (low === "screen") return getScreenSummary();
+  if (low === "system") return getSystemSummary();
+  if (low === "date") return `DATE: <b>${new Date().toLocaleDateString()}</b>`;
+  if (low === "time") return `TIME: <b>${new Date().toLocaleTimeString()}</b>`;
+  if (low === "session") return getSessionSummary();
+  if (low === "archives") return getArchiveSummary();
+  if (low === "battery") return await getBatteryStatus();
+  if (low === "coords" || low === "coordinates") return await getCoords();
+  if (low === "compass") return await getCompassReading();
 
-    if (activeRecognition) {
-      try { activeRecognition.stop(); } catch (e) { console.error(e); }
+  if (low.startsWith("note ")) {
+    const note = val.slice(5).trim();
+    if (!note) return "EMPTY NOTE.";
+    const notes = getNotes();
+    notes.push(note);
+    saveNotes(notes);
+    return "NOTE STORED.";
+  }
+
+  if (low === "notes") return formatList(getNotes(), "STORED NOTES");
+
+  if (low === "clear notes") {
+    saveNotes([]);
+    return "NOTES PURGED.";
+  }
+
+  if (low.startsWith("remember ")) return addMemory(val.slice(9));
+  if (low === "recall" || low === "memory") return getMemorySummary();
+
+  if (low.startsWith("forget ")) {
+    const arg = low.slice(7).trim();
+    if (arg === "all") return forgetAllMemory();
+    const idx = parseInt(arg, 10) - 1;
+    if (!Number.isFinite(idx)) return "USE: forget 1 OR forget all";
+    return forgetMemory(idx);
+  }
+
+  if (low === "forget all") return forgetAllMemory();
+
+  if (low.startsWith("task add ")) return addTask(val.slice(9));
+  if (low === "task list" || low === "tasks") return getTaskList();
+  if (low.startsWith("task done ")) {
+    const idx = parseInt(val.slice(10).trim(), 10) - 1;
+    return completeTask(idx);
+  }
+  if (low === "task clear" || low === "clear tasks") return clearTasks();
+
+  if (low.startsWith("check add ")) return addChecklistItem(val.slice(10));
+  if (low === "check list" || low === "checklist") return getChecklistSummary();
+  if (low.startsWith("check done ")) {
+    const idx = parseInt(val.slice(11).trim(), 10) - 1;
+    if (!Number.isFinite(idx)) return "USE: check done 1";
+    return completeChecklistItem(idx);
+  }
+  if (low === "check clear" || low === "clear checklist") return clearChecklist();
+
+  if (low === "flip coin") return flipCoin();
+
+  if (low === "roll die" || low === "roll dice") return rollDie(6);
+  if (low.startsWith("roll d")) {
+    const sides = parseInt(low.slice(6), 10);
+    return rollDie(sides);
+  }
+
+  if (low === "choose letter") return chooseLetter();
+  if (low.startsWith("choose letter ")) {
+    const parts = low.split(/\s+/);
+    if (parts.length === 4) return chooseLetterRange(parts[2], parts[3]);
+    return chooseLetter();
+  }
+
+  if (low.startsWith("choose number ")) {
+    const parts = low.split(/\s+/);
+    if (parts.length >= 4) {
+      const min = parseInt(parts[2], 10);
+      const max = parseInt(parts[3], 10);
+      return chooseNumberBetween(min, max);
     }
+    return "USE: choose number 1 50";
+  }
 
-    isListening = false;
-    activeRecognition = null;
+  if (low.startsWith("choose a number between ")) {
+    const match = low.match(/^choose a number between\s+(-?\d+)\s+and\s+(-?\d+)$/);
+    if (match) {
+      return chooseNumberBetween(parseInt(match[1], 10), parseInt(match[2], 10));
+    }
+    return "USE: choose a number between 1 and 50";
+  }
 
-    stopTalking();
-    document.body.classList.remove("emergency-active");
-    stopSiren();
+  if (low === "stopwatch start") return startStopwatch();
+  if (low === "stopwatch stop") return stopStopwatch();
+  if (low === "stopwatch reset") return resetStopwatch();
+  if (low === "stopwatch status") return stopwatchStatus();
 
-    i.type = "password";
-    i.value = "";
-    i.placeholder = "System Lockdown...";
+  if (low === "countdown stop") return stopCountdown();
+  if (low === "countdown status") return countdownStatus();
+  if (low.startsWith("countdown ")) {
+    const seconds = parseCountdownInput(val.slice(10));
+    if (!Number.isFinite(seconds)) return "USE: countdown 5m OR countdown 300 OR countdown 05:00";
+    return startCountdown(seconds);
+  }
 
-    document.getElementById("sub-label").innerText = "LOCKED";
-    visor.innerHTML = "";
-    menu.style.display = "none";
+  if (low === "alarm stop") return stopAlarm();
+  if (low === "alarm status") return getAlarmStatus();
+  if (low.startsWith("alarm ")) {
+    const alarmVal = val.slice(6).trim().toLowerCase();
 
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
+    const timeMatch = alarmVal.match(/^(\d{1,2}):(\d{2})$/);
+    if (timeMatch) return setAlarmAt(timeMatch[1], timeMatch[2]);
+
+    const seconds = parseCountdownInput(alarmVal);
+    if (Number.isFinite(seconds)) return setAlarmFromNow(seconds);
+
+    return "USE: alarm 5m OR alarm 07:30";
+  }
+
+  if (low === "reminders") return getRemindersSummary();
+  if (low === "clear reminders") return clearReminders();
+
+  if (low.startsWith("remind me in ")) {
+    const m = val.match(/^remind me in\s+(.+?)\s+(.+)$/i);
+    if (!m) return "USE: remind me in 15m take laundry out";
+    const seconds = parseCountdownInput(m[1]);
+    if (!Number.isFinite(seconds)) return "INVALID REMINDER TIME.";
+    return setReminderIn(seconds, m[2]);
+  }
+
+  if (low.startsWith("remind me at ")) {
+    const m = val.match(/^remind me at\s+(\d{1,2}):(\d{2})\s+(.+)$/i);
+    if (!m) return "USE: remind me at 19:30 call mom";
+    return setReminderAt(m[1], m[2], m[3]);
+  }
+
+  if (low === "flashlight on") return await flashlightOn();
+  if (low === "flashlight off") return await flashlightOff();
+
+  if (low === "minimal on") {
+    applyMinimalMode(true);
+    return "MINIMAL MODE ON.";
+  }
+
+  if (low === "minimal off") {
+    applyMinimalMode(false);
+    return "MINIMAL MODE OFF.";
+  }
+
+  if (low === "youtube history") {
+    const history = getYoutubeHistory();
+    if (!history.length) return "YOUTUBE HISTORY: EMPTY.";
+    return `<b>YOUTUBE HISTORY</b><br>` + history.map((item, idx) => {
+      const safeTitle = String(item.title || "UNTITLED").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const safeMode = String(item.mode || "video").toUpperCase();
+      const safeId = String(item.videoId || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      return `${idx + 1}. ${safeTitle} [${safeMode}]<br><button class="uplink-btn" onclick="openMediaByVideoId('${safeId}','${safeTitle.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}','${item.mode || "video"}')">REOPEN</button>`;
+    }).join("<br>");
+  }
+
+  if (low.startsWith("play ")) {
+    if (isOffline) return offlineBlocked("media");
+    await openMediaByQuery(val.slice(5).trim(), "video");
+    return "";
+  }
+
+  if (low.startsWith("music ")) {
+    if (isOffline) return offlineBlocked("media");
+    await openMediaByQuery(val.slice(6).trim(), "music");
+    return "";
+  }
+
+  if (low.startsWith("yt ")) {
+    if (isOffline) return offlineBlocked("media");
+    await openMediaByQuery(val.slice(3).trim(), "video");
+    return "";
+  }
+
+  if (low.startsWith("youtube ")) {
+    if (isOffline) return offlineBlocked("media");
+    await openMediaByQuery(val.slice(8).trim(), "video");
+    return "";
+  }
+
+  if (low.startsWith("watch ")) {
+    if (isOffline) return offlineBlocked("media");
+    await openMediaByQuery(val.slice(6).trim(), "video");
+    return "";
+  }
+
+  if (low === "stop media" || low === "stop video") {
+    stopMedia(true);
+    return "";
+  }
+
+  if (
+    low === "close media" ||
+    low === "close video" ||
+    low === "exit media" ||
+    low === "exit video"
+  ) {
+    closeMedia(true);
+    return "";
+  }
+
+  if (/^[0-9+\-*/().\s×÷]+$/.test(val) && /[+\-*/×÷]/.test(val)) {
+    try {
+      return `RESULT: <b>${Function(`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})`)()}</b>`;
+    } catch {
+      return "CALC ERROR.";
     }
   }
 
-  window.onload = () => {
-    setupMicButton();
-
-    if (!getSessionData().boot) saveSessionData({ commands: 0, boot: Date.now() });
-
-    const savedAlarm = getAlarmData();
-    if (savedAlarm?.target && savedAlarm.target > Date.now()) {
-      alarmTimeout = setTimeout(triggerAlarm, savedAlarm.target - Date.now());
+  if (low.startsWith("calc ")) {
+    const expr = val.slice(5).trim().replace(/×/g, "*").replace(/÷/g, "/");
+    if (!/^[0-9+\-*/().\s]+$/.test(expr)) return "INVALID CALC INPUT.";
+    try {
+      return `RESULT: <b>${Function(`"use strict"; return (${expr})`)()}</b>`;
+    } catch {
+      return "CALC ERROR.";
     }
+  }
 
-    restoreReminders();
-    applyMinimalMode(minimalMode);
+  return "OFFLINE MODE ACTIVE. USE 'capabilities' TO VIEW ONLINE/OFFLINE COMMANDS.";
+}
 
-    if (authenticated) unlockUI();
-    if (isOffline) document.body.classList.add("offline-active");
+function lockMode() {
+  authenticated = false;
+  sessionStorage.removeItem("ok_auth");
 
-    updateClock();
-    setInterval(updateClock, 1000);
+  const i = document.getElementById("in");
+  const visor = document.getElementById("visor");
+  const menu = document.getElementById("menu");
 
-    fetchWeather();
-    if (weatherInterval) clearInterval(weatherInterval);
-    weatherInterval = setInterval(fetchWeather, 600000);
+  if (activeRecognition) {
+    try { activeRecognition.stop(); } catch (e) { console.error(e); }
+  }
 
-    renderMediaHome();
-  };
+  isListening = false;
+  activeRecognition = null;
 
-  function unlockUI() {
-    const i = document.getElementById("in");
-    i.type = "text";
-    i.placeholder = "Query the Domain...";
+  stopTalking();
+  document.body.classList.remove("emergency-active");
+  stopSiren();
 
-    if (isOffline) {
-      document.getElementById("sub-label").innerText = "UTILITY CORE";
+  i.type = "password";
+  i.value = "";
+  i.placeholder = "System Lockdown...";
+
+  document.getElementById("sub-label").innerText = "LOCKED";
+  visor.innerHTML = "";
+  menu.style.display = "none";
+
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+window.onload = () => {
+  setupMicButton();
+
+  if (!getSessionData().boot) saveSessionData({ commands: 0, boot: Date.now() });
+
+  const savedAlarm = getAlarmData();
+  if (savedAlarm?.target && savedAlarm.target > Date.now()) {
+    alarmTimeout = setTimeout(triggerAlarm, savedAlarm.target - Date.now());
+  }
+
+  restoreReminders();
+  applyMinimalMode(minimalMode);
+
+  if (authenticated) unlockUI();
+  if (isOffline) document.body.classList.add("offline-active");
+
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  fetchWeather();
+  if (weatherInterval) clearInterval(weatherInterval);
+  weatherInterval = setInterval(fetchWeather, 600000);
+
+  renderMediaHome();
+};
+
+function unlockUI() {
+  const i = document.getElementById("in");
+  i.type = "text";
+  i.placeholder = "Query the Domain...";
+
+  if (isOffline) {
+    document.getElementById("sub-label").innerText = "UTILITY CORE";
+  } else {
+    if (backendMode !== "web" && backendMode !== "auto") {
+      selectedProvider = backendMode;
+      sessionStorage.setItem(PROVIDER_KEY, selectedProvider);
+    }
+    refreshProviderSubLabel();
+  }
+
+  loadSlot(1);
+
+  if (voiceMode && authenticated && !document.body.classList.contains("talking")) {
+    scheduleVoiceRelisten(500);
+  }
+}
+
+function splitSpeechChunks(text, maxLen = 180) {
+  const cleaned = String(text || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return [];
+
+  const sentences = cleaned.match(/[^.!?]+[.!?]*|.+$/g) || [cleaned];
+  const chunks = [];
+  let buffer = "";
+
+  for (const sentence of sentences) {
+    const s = sentence.trim();
+    if (!s) continue;
+
+    if ((buffer + " " + s).trim().length <= maxLen) {
+      buffer = (buffer + " " + s).trim();
     } else {
-      if (backendMode !== "web" && backendMode !== "auto") {
-        selectedProvider = backendMode;
-        sessionStorage.setItem(PROVIDER_KEY, selectedProvider);
-      }
-      refreshProviderSubLabel();
-    }
+      if (buffer) chunks.push(buffer);
 
-    loadSlot(1);
-
-    if (voiceMode && authenticated && !document.body.classList.contains("talking")) {
-      scheduleVoiceRelisten(500);
-    }
-  }
-
-  function splitSpeechChunks(text, maxLen = 180) {
-    const cleaned = String(text || "")
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (!cleaned) return [];
-
-    const sentences = cleaned.match(/[^.!?]+[.!?]*|.+$/g) || [cleaned];
-    const chunks = [];
-    let buffer = "";
-
-    for (const sentence of sentences) {
-      const s = sentence.trim();
-      if (!s) continue;
-
-      if ((buffer + " " + s).trim().length <= maxLen) {
-        buffer = (buffer + " " + s).trim();
+      if (s.length <= maxLen) {
+        buffer = s;
       } else {
-        if (buffer) chunks.push(buffer);
+        const words = s.split(" ");
+        let sub = "";
 
-        if (s.length <= maxLen) {
-          buffer = s;
-        } else {
-          const words = s.split(" ");
-          let sub = "";
-
-          for (const word of words) {
-            if ((sub + " " + word).trim().length <= maxLen) {
-              sub = (sub + " " + word).trim();
-            } else {
-              if (sub) chunks.push(sub);
-              sub = word;
-            }
+        for (const word of words) {
+          if ((sub + " " + word).trim().length <= maxLen) {
+            sub = (sub + " " + word).trim();
+          } else {
+            if (sub) chunks.push(sub);
+            sub = word;
           }
-
-          buffer = sub;
         }
+
+        buffer = sub;
       }
     }
-
-    if (buffer) chunks.push(buffer);
-    return chunks;
   }
 
-  function speakNextChunk() {
-    if (speechStopRequested) {
-      speakingNow = false;
-      currentUtterance = null;
-      document.body.classList.remove("talking");
-      stopInterruptListener();
-      setListeningVisual(false);
-      scheduleVoiceRelisten();
-      return;
-    }
+  if (buffer) chunks.push(buffer);
+  return chunks;
+}
 
-    if (!speechQueue.length) {
-      speakingNow = false;
-      currentUtterance = null;
-      document.body.classList.remove("talking");
-      stopInterruptListener();
-      setListeningVisual(false);
-      scheduleVoiceRelisten();
-      return;
-    }
-
-    const chunk = speechQueue.shift();
-    const utter = new SpeechSynthesisUtterance(chunk);
-    currentUtterance = utter;
-
-    utter.pitch = 0.8;
-    utter.rate = 1.0;
-
-    utter.onstart = () => {
-      document.body.classList.add("talking");
-      setListeningVisual(false);
-      startInterruptListener();
-    };
-
-    utter.onend = () => {
-      currentUtterance = null;
-      setTimeout(() => {
-        speakNextChunk();
-      }, 60);
-    };
-
-    utter.onerror = (e) => {
-      console.error(e);
-      currentUtterance = null;
-      setTimeout(() => {
-        speakNextChunk();
-      }, 60);
-    };
-
-    try {
-      window.speechSynthesis.speak(utter);
-    } catch (e) {
-      console.error(e);
-      speakingNow = false;
-      currentUtterance = null;
-      document.body.classList.remove("talking");
-      stopInterruptListener();
-      setListeningVisual(false);
-      scheduleVoiceRelisten();
-    }
-  }
-
-  function talk(txt) {
-    const cleaned = String(txt || "")
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (!cleaned) return;
-
-    speechStopRequested = false;
-    speechQueue = splitSpeechChunks(cleaned, 180);
-
-    try {
-      window.speechSynthesis.cancel();
-    } catch (e) {
-      console.error(e);
-    }
-
+function speakNextChunk() {
+  if (speechStopRequested) {
+    speakingNow = false;
+    currentUtterance = null;
     document.body.classList.remove("talking");
     stopInterruptListener();
     setListeningVisual(false);
-
-    speakingNow = true;
-    speakNextChunk();
+    scheduleVoiceRelisten();
+    return;
   }
 
-  function offlineBlocked(featureName) {
-    if (String(featureName).toLowerCase() === "gather") {
-      return "GATHER REQUIRES NETWORK ACCESS. SWITCH TO CLOUD MODE.";
-    }
-    return `${featureName.toUpperCase()} DISABLED IN OFFLINE MODE.`;
+  if (!speechQueue.length) {
+    speakingNow = false;
+    currentUtterance = null;
+    document.body.classList.remove("talking");
+    stopInterruptListener();
+    setListeningVisual(false);
+    scheduleVoiceRelisten();
+    return;
   }
 
-  async function strike() {
-    await resumeAudio();
+  const chunk = speechQueue.shift();
+  const utter = new SpeechSynthesisUtterance(chunk);
+  currentUtterance = utter;
 
-    const i = document.getElementById("in");
-    let val = i.value.trim();
-    if (!val) return;
+  utter.pitch = 0.8;
+  utter.rate = 1.0;
 
-    stopTalking();
+  utter.onstart = () => {
+    document.body.classList.add("talking");
+    setListeningVisual(false);
+    startInterruptListener();
+  };
 
-    if (!authenticated) {
-      if (val === "2644") {
-        authenticated = true;
-        sessionStorage.setItem("ok_auth", "true");
-        unlockUI();
-        talk("Bridge synced.");
-        playTone(600, "square", 0.2, 0.1);
-        i.value = "";
-        document.body.classList.remove("emergency-active");
-        stopSiren();
-      } else {
-        document.body.classList.add("emergency-active");
-        startSiren();
-        talk("Unauthorized.");
-        i.value = "";
-      }
-      return;
-    }
+  utter.onend = () => {
+    currentUtterance = null;
+    setTimeout(() => {
+      speakNextChunk();
+    }, 60);
+  };
 
-    if (activeSlot === 11) {
-      renderSystemPanel();
+  utter.onerror = (e) => {
+    console.error(e);
+    currentUtterance = null;
+    setTimeout(() => {
+      speakNextChunk();
+    }, 60);
+  };
+
+  try {
+    window.speechSynthesis.speak(utter);
+  } catch (e) {
+    console.error(e);
+    speakingNow = false;
+    currentUtterance = null;
+    document.body.classList.remove("talking");
+    stopInterruptListener();
+    setListeningVisual(false);
+    scheduleVoiceRelisten();
+  }
+}
+
+function talk(txt) {
+  const cleaned = String(txt || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return;
+
+  speechStopRequested = false;
+  speechQueue = splitSpeechChunks(cleaned, 180);
+
+  try {
+    window.speechSynthesis.cancel();
+  } catch (e) {
+    console.error(e);
+  }
+
+  document.body.classList.remove("talking");
+  stopInterruptListener();
+  setListeningVisual(false);
+
+  speakingNow = true;
+  speakNextChunk();
+}
+
+function offlineBlocked(featureName) {
+  if (String(featureName).toLowerCase() === "gather") {
+    return "GATHER REQUIRES NETWORK ACCESS. SWITCH TO CLOUD MODE.";
+  }
+  return `${featureName.toUpperCase()} DISABLED IN OFFLINE MODE.`;
+}
+
+async function strike() {
+  await resumeAudio();
+
+  const i = document.getElementById("in");
+  let val = i.value.trim();
+  if (!val) return;
+
+  stopTalking();
+
+  if (!authenticated) {
+    if (val === "2644") {
+      authenticated = true;
+      sessionStorage.setItem("ok_auth", "true");
+      unlockUI();
+      talk("Bridge synced.");
+      playTone(600, "square", 0.2, 0.1);
       i.value = "";
-      return;
-    }
-
-    addMsg(val, "user");
-    bumpSessionCommandCount();
-    i.value = "";
-    const low = val.toLowerCase();
-    let res = "";
-
-    if (low === "download mlc apk") {
-      downloadAPK();
-      talk("MLC APK download opened.");
-      return;
-    }
-
-    if (low === "open mlc") {
-      openMLC();
-      talk("Opening MLC.");
-      return;
-    }
-
-    if (low === "copy brain") {
-      await copyBrain();
-      talk("Brain copied.");
-      return;
-    }
-
-    if (LOCAL_LAUNCH_COMMANDS.includes(low)) {
-      await launchLocalCoreWithBrain();
-      talk("MLC launch request sent. Brain copied.");
-      return;
-    }
-
-    if (low === "lock mode") {
-      addMsg("LOCK MODE ENGAGED.", "bot");
-      lockMode();
-      return;
-    }
-
-    if (["help", "emergency"].includes(low)) {
-      document.body.classList.add("emergency-active");
-      startSiren();
-      addMsg("<b>CRITICAL STATE ACTIVE.</b>", "bot");
-      return;
-    }
-
-    if (["clear", "stand down"].includes(low)) {
       document.body.classList.remove("emergency-active");
       stopSiren();
-      addMsg("Systems nominal.", "bot");
-      return;
+    } else {
+      document.body.classList.add("emergency-active");
+      startSiren();
+      talk("Unauthorized.");
+      i.value = "";
     }
+    return;
+  }
 
-    if (low === "voice mode on") {
-      res = setVoiceMode(true);
-      addMsg(res, "bot");
-      talk(res);
-      return;
-    }
+  if (activeSlot === 11) {
+    renderSystemPanel();
+    i.value = "";
+    return;
+  }
 
-    if (low === "voice mode off") {
-      res = setVoiceMode(false);
-      addMsg(res, "bot");
-      talk(res);
-      return;
-    }
+  addMsg(val, "user");
+  bumpSessionCommandCount();
+  i.value = "";
+  const low = val.toLowerCase();
+  let res = "";
 
-    if (low === "use web" || low === "use webllm") {
-      res = setBackend("web");
-      addMsg(res, "bot");
-      talk(res);
-      return;
-    }
+  if (low === "download mlc apk") {
+    downloadAPK();
+    talk("MLC APK download opened.");
+    return;
+  }
 
-    if (low === "use auto") {
-      res = setBackend("auto");
-      addMsg(res, "bot");
-      talk(res);
-      return;
-    }
+  if (low === "open mlc") {
+    openMLC();
+    talk("Opening MLC.");
+    return;
+  }
 
-    if ([
-      "use groq", "use gemini", "use xai", "use grok", "use openai",
-      "use anthropic", "use claude", "use openrouter", "use deepinfra",
-      "use together", "use fireworks", "use cloudflare", "use ollama"
-    ].includes(low)) {
-      const nextProvider = normalizeProviderName(low.replace("use ", "").trim());
-      selectedProvider = nextProvider;
-      sessionStorage.setItem(PROVIDER_KEY, selectedProvider);
-      setBackend(nextProvider);
+  if (low === "copy brain") {
+    await copyBrain();
+    talk("Brain copied.");
+    return;
+  }
 
-      if (nextProvider === "ollama") {
-        if (!getProviderModel("ollama")) {
-          const enteredModel = prompt("ENTER OLLAMA MODEL NAME:", "llama3.2:3b");
-          if (!enteredModel || !enteredModel.trim()) {
-            res = "OLLAMA MODEL NOT PROVIDED.";
-            addMsg(res, "bot");
-            talk(res);
-            return;
-          }
-          localStorage.setItem(OLLAMA_MODEL_STORE, enteredModel.trim());
-          DEFAULT_MODELS.ollama = enteredModel.trim();
+  if (LOCAL_LAUNCH_COMMANDS.includes(low)) {
+    await launchLocalCoreWithBrain();
+    talk("MLC launch request sent. Brain copied.");
+    return;
+  }
+
+  if (low === "lock mode") {
+    addMsg("LOCK MODE ENGAGED.", "bot");
+    lockMode();
+    return;
+  }
+
+  if (["help", "emergency"].includes(low)) {
+    document.body.classList.add("emergency-active");
+    startSiren();
+    addMsg("<b>CRITICAL STATE ACTIVE.</b>", "bot");
+    return;
+  }
+
+  if (["clear", "stand down"].includes(low)) {
+    document.body.classList.remove("emergency-active");
+    stopSiren();
+    addMsg("Systems nominal.", "bot");
+    return;
+  }
+
+  if (low === "voice mode on") {
+    res = setVoiceMode(true);
+    addMsg(res, "bot");
+    talk(res);
+    return;
+  }
+
+  if (low === "voice mode off") {
+    res = setVoiceMode(false);
+    addMsg(res, "bot");
+    talk(res);
+    return;
+  }
+
+  if (low === "use web" || low === "use webllm") {
+    res = setBackend("web");
+    addMsg(res, "bot");
+    talk(res);
+    return;
+  }
+
+  if (low === "use auto") {
+    res = setBackend("auto");
+    addMsg(res, "bot");
+    talk(res);
+    return;
+  }
+
+  if ([
+    "use groq", "use gemini", "use xai", "use grok", "use openai",
+    "use anthropic", "use claude", "use openrouter", "use deepinfra",
+    "use together", "use fireworks", "use cloudflare", "use ollama"
+  ].includes(low)) {
+    const nextProvider = normalizeProviderName(low.replace("use ", "").trim());
+    selectedProvider = nextProvider;
+    sessionStorage.setItem(PROVIDER_KEY, selectedProvider);
+    setBackend(nextProvider);
+
+    if (nextProvider === "ollama") {
+      if (!getProviderModel("ollama")) {
+        const enteredModel = prompt("ENTER OLLAMA MODEL NAME:", "llama3.2:3b");
+        if (!enteredModel || !enteredModel.trim()) {
+          res = "OLLAMA MODEL NOT PROVIDED.";
+          addMsg(res, "bot");
+          talk(res);
+          return;
         }
-
-        refreshProviderSubLabel();
-        res = `AI PROVIDER SET: ${getProviderLabel(selectedProvider)}`;
-        addMsg(res, "bot");
-        talk(res);
-        return;
-      }
-
-      if (!providerHasKey(selectedProvider)) {
-        if (nextProvider === "cloudflare") {
-          const enteredKey = prompt("ENTER CLOUDFLARE API KEY:");
-          if (!enteredKey || !enteredKey.trim()) {
-            res = "CLOUDFLARE KEY NOT PROVIDED.";
-            addMsg(res, "bot");
-            talk(res);
-            return;
-          }
-          setProviderKey("cloudflare", enteredKey.trim());
-
-          const accountId = prompt("ENTER CLOUDFLARE ACCOUNT ID:");
-          if (!accountId || !accountId.trim()) {
-            res = "CLOUDFLARE ACCOUNT ID NOT PROVIDED.";
-            addMsg(res, "bot");
-            talk(res);
-            return;
-          }
-          sessionStorage.setItem(CLOUDFLARE_ACCOUNT_ID_STORE, accountId.trim());
-        } else {
-          const enteredKey = prompt(`ENTER ${getProviderLabel(selectedProvider)} API KEY:`);
-          if (!enteredKey || !enteredKey.trim()) {
-            res = `${getProviderLabel(selectedProvider)} KEY NOT PROVIDED.`;
-            addMsg(res, "bot");
-            talk(res);
-            return;
-          }
-          setProviderKey(selectedProvider, enteredKey.trim());
-        }
+        localStorage.setItem(OLLAMA_MODEL_STORE, enteredModel.trim());
+        DEFAULT_MODELS.ollama = enteredModel.trim();
       }
 
       refreshProviderSubLabel();
@@ -4433,508 +4440,573 @@ clear api all`;
       return;
     }
 
-    if (low === "switch provider") {
-      promptSwitchProvider();
-      return;
-    }
-
-    if (low === "provider" || low === "ai provider") {
-      res = `BACKEND: ${getProviderLabel(backendMode)}${
-        backendMode !== "web" ? `<br>ACTIVE PROVIDER: ${selectedProvider ? getProviderLabel(selectedProvider) : "NONE"}` : ""
-      }`;
-      addMsg(res, "bot");
-      talk(`Backend ${getProviderLabel(backendMode)}.`);
-      return;
-    }
-
-    if (low === "clear current key") {
-      if (backendMode === "web") {
-        res = "WEBLLM HAS NO API KEY TO CLEAR.";
-      } else if (backendMode === "ollama") {
-        res = "OLLAMA HAS NO API KEY TO CLEAR.";
-      } else if (!selectedProvider) {
-        res = "NO ACTIVE PROVIDER.";
-      } else {
-        clearProviderKey(selectedProvider);
-        if (normalizeProviderName(selectedProvider) === "cloudflare") {
-          sessionStorage.removeItem(CLOUDFLARE_ACCOUNT_ID_STORE);
-        }
-        refreshProviderSubLabel();
-        res = `${getProviderLabel(selectedProvider)} KEY CLEARED.`;
-      }
-      addMsg(res, "bot");
-      talk(stripHTML(res));
-      return;
-    }
-
-    if (low === "clear api" || low === "clear current api") {
-      if (backendMode === "web") {
-        res = "WEBLLM HAS NO API KEY TO CLEAR.";
-      } else if (backendMode === "ollama") {
-        res = "OLLAMA HAS NO API KEY TO CLEAR.";
-      } else if (!selectedProvider) {
-        res = "NO ACTIVE PROVIDER.";
-      } else {
-        clearProviderKey(selectedProvider);
-        if (normalizeProviderName(selectedProvider) === "cloudflare") {
-          sessionStorage.removeItem(CLOUDFLARE_ACCOUNT_ID_STORE);
-        }
-        refreshProviderSubLabel();
-        res = `${getProviderLabel(selectedProvider)} KEY CLEARED.`;
-      }
-      addMsg(res, "bot");
-      talk(stripHTML(res));
-      return;
-    }
-
-    if (low === "clear api all" || low === "clear all keys" || low === "clear all api keys") {
-      clearAllProviderKeys();
-      sessionStorage.removeItem(CLOUDFLARE_ACCOUNT_ID_STORE);
-      clearYouTubeApiKey();
-      refreshProviderSubLabel();
-      res = "ALL PROVIDER KEYS CLEARED.";
-      addMsg(res, "bot");
-      talk(res);
-      return;
-    }
-
-    {
-      const setKeyMatch = low.match(/^set\s+(groq|gemini|xai|grok|openai|anthropic|claude|openrouter|deepinfra|together|fireworks|cloudflare|ollama|youtube)\s+key$/);
-      if (setKeyMatch) {
-        const provider = normalizeProviderName(setKeyMatch[1]);
-
-        if (provider === "youtube") {
-          const ok = setYouTubeApiKey();
-          res = ok ? "YOUTUBE KEY STORED." : "YOUTUBE KEY NOT PROVIDED.";
-          addMsg(res, "bot");
-          talk(res);
-          if (activeSlot === 11) renderSystemPanel();
-          return;
-        }
-
-        if (provider === "ollama") {
-          const enteredModel = prompt("ENTER OLLAMA MODEL NAME:", getProviderModel("ollama"));
-          if (!enteredModel || !enteredModel.trim()) {
-            res = "OLLAMA MODEL NOT PROVIDED.";
-          } else {
-            localStorage.setItem(OLLAMA_MODEL_STORE, enteredModel.trim());
-            DEFAULT_MODELS.ollama = enteredModel.trim();
-            selectedProvider = provider;
-            sessionStorage.setItem(PROVIDER_KEY, selectedProvider);
-            setBackend(provider);
-            refreshProviderSubLabel();
-            res = `OLLAMA MODEL SET: ${enteredModel.trim()}`;
-          }
-          addMsg(res, "bot");
-          talk(res);
-          return;
-        }
-
-        const enteredKey = prompt(`ENTER ${getProviderLabel(provider)} API KEY:`, getProviderKey(provider) || "");
+    if (!providerHasKey(selectedProvider)) {
+      if (nextProvider === "cloudflare") {
+        const enteredKey = prompt("ENTER CLOUDFLARE API KEY:");
         if (!enteredKey || !enteredKey.trim()) {
-          res = `${getProviderLabel(provider)} KEY NOT PROVIDED.`;
+          res = "CLOUDFLARE KEY NOT PROVIDED.";
+          addMsg(res, "bot");
+          talk(res);
+          return;
+        }
+        setProviderKey("cloudflare", enteredKey.trim());
+
+        const accountId = prompt("ENTER CLOUDFLARE ACCOUNT ID:");
+        if (!accountId || !accountId.trim()) {
+          res = "CLOUDFLARE ACCOUNT ID NOT PROVIDED.";
+          addMsg(res, "bot");
+          talk(res);
+          return;
+        }
+        sessionStorage.setItem(CLOUDFLARE_ACCOUNT_ID_STORE, accountId.trim());
+      } else {
+        const enteredKey = prompt(`ENTER ${getProviderLabel(selectedProvider)} API KEY:`);
+        if (!enteredKey || !enteredKey.trim()) {
+          res = `${getProviderLabel(selectedProvider)} KEY NOT PROVIDED.`;
+          addMsg(res, "bot");
+          talk(res);
+          return;
+        }
+        setProviderKey(selectedProvider, enteredKey.trim());
+      }
+    }
+
+    refreshProviderSubLabel();
+    res = `AI PROVIDER SET: ${getProviderLabel(selectedProvider)}`;
+    addMsg(res, "bot");
+    talk(res);
+    return;
+  }
+
+  if (low === "switch provider") {
+    promptSwitchProvider();
+    return;
+  }
+
+  if (low === "provider" || low === "ai provider") {
+    res = `BACKEND: ${getProviderLabel(backendMode)}${
+      backendMode !== "web" ? `<br>ACTIVE PROVIDER: ${selectedProvider ? getProviderLabel(selectedProvider) : "NONE"}` : ""
+    }`;
+    addMsg(res, "bot");
+    talk(`Backend ${getProviderLabel(backendMode)}.`);
+    return;
+  }
+
+  if (low === "clear current key") {
+    if (backendMode === "web") {
+      res = "WEBLLM HAS NO API KEY TO CLEAR.";
+    } else if (backendMode === "ollama") {
+      res = "OLLAMA HAS NO API KEY TO CLEAR.";
+    } else if (!selectedProvider) {
+      res = "NO ACTIVE PROVIDER.";
+    } else {
+      clearProviderKey(selectedProvider);
+      if (normalizeProviderName(selectedProvider) === "cloudflare") {
+        sessionStorage.removeItem(CLOUDFLARE_ACCOUNT_ID_STORE);
+      }
+      refreshProviderSubLabel();
+      res = `${getProviderLabel(selectedProvider)} KEY CLEARED.`;
+    }
+    addMsg(res, "bot");
+    talk(stripHTML(res));
+    return;
+  }
+
+  if (low === "clear api" || low === "clear current api") {
+    if (backendMode === "web") {
+      res = "WEBLLM HAS NO API KEY TO CLEAR.";
+    } else if (backendMode === "ollama") {
+      res = "OLLAMA HAS NO API KEY TO CLEAR.";
+    } else if (!selectedProvider) {
+      res = "NO ACTIVE PROVIDER.";
+    } else {
+      clearProviderKey(selectedProvider);
+      if (normalizeProviderName(selectedProvider) === "cloudflare") {
+        sessionStorage.removeItem(CLOUDFLARE_ACCOUNT_ID_STORE);
+      }
+      refreshProviderSubLabel();
+      res = `${getProviderLabel(selectedProvider)} KEY CLEARED.`;
+    }
+    addMsg(res, "bot");
+    talk(stripHTML(res));
+    return;
+  }
+
+  if (low === "clear api all" || low === "clear all keys" || low === "clear all api keys") {
+    clearAllProviderKeys();
+    sessionStorage.removeItem(CLOUDFLARE_ACCOUNT_ID_STORE);
+    clearYouTubeApiKey();
+    refreshProviderSubLabel();
+    res = "ALL PROVIDER KEYS CLEARED.";
+    addMsg(res, "bot");
+    talk(res);
+    return;
+  }
+
+  {
+    const setKeyMatch = low.match(/^set\s+(groq|gemini|xai|grok|openai|anthropic|claude|openrouter|deepinfra|together|fireworks|cloudflare|ollama|youtube)\s+key$/);
+    if (setKeyMatch) {
+      const provider = normalizeProviderName(setKeyMatch[1]);
+
+      if (provider === "youtube") {
+        const ok = setYouTubeApiKey();
+        res = ok ? "YOUTUBE KEY STORED." : "YOUTUBE KEY NOT PROVIDED.";
+        addMsg(res, "bot");
+        talk(res);
+        if (activeSlot === 11) renderSystemPanel();
+        return;
+      }
+
+      if (provider === "ollama") {
+        const enteredModel = prompt("ENTER OLLAMA MODEL NAME:", getProviderModel("ollama"));
+        if (!enteredModel || !enteredModel.trim()) {
+          res = "OLLAMA MODEL NOT PROVIDED.";
         } else {
-          setProviderKey(provider, enteredKey.trim());
-
-          if (provider === "cloudflare") {
-            const accountId = prompt("ENTER CLOUDFLARE ACCOUNT ID:", sessionStorage.getItem(CLOUDFLARE_ACCOUNT_ID_STORE) || "");
-            if (!accountId || !accountId.trim()) {
-              res = "CLOUDFLARE ACCOUNT ID NOT PROVIDED.";
-              addMsg(res, "bot");
-              talk(res);
-              return;
-            }
-            sessionStorage.setItem(CLOUDFLARE_ACCOUNT_ID_STORE, accountId.trim());
-          }
-
+          localStorage.setItem(OLLAMA_MODEL_STORE, enteredModel.trim());
+          DEFAULT_MODELS.ollama = enteredModel.trim();
           selectedProvider = provider;
           sessionStorage.setItem(PROVIDER_KEY, selectedProvider);
           setBackend(provider);
           refreshProviderSubLabel();
-          res = `${getProviderLabel(provider)} KEY STORED.`;
+          res = `OLLAMA MODEL SET: ${enteredModel.trim()}`;
         }
         addMsg(res, "bot");
         talk(res);
         return;
       }
-    }
 
-    {
-      const clearKeyMatch = low.match(/^clear\s+(groq|gemini|xai|grok|openai|anthropic|claude|openrouter|deepinfra|together|fireworks|cloudflare|youtube)\s+key$/);
-      if (clearKeyMatch) {
-        const provider = normalizeProviderName(clearKeyMatch[1]);
+      const enteredKey = prompt(`ENTER ${getProviderLabel(provider)} API KEY:`, getProviderKey(provider) || "");
+      if (!enteredKey || !enteredKey.trim()) {
+        res = `${getProviderLabel(provider)} KEY NOT PROVIDED.`;
+      } else {
+        setProviderKey(provider, enteredKey.trim());
 
-        if (provider === "youtube") {
-          clearYouTubeApiKey();
-          if (activeSlot === 11) renderSystemPanel();
-          res = "YOUTUBE KEY CLEARED.";
-          addMsg(res, "bot");
-          talk(res);
-          return;
-        }
-
-        clearProviderKey(provider);
         if (provider === "cloudflare") {
-          sessionStorage.removeItem(CLOUDFLARE_ACCOUNT_ID_STORE);
+          const accountId = prompt("ENTER CLOUDFLARE ACCOUNT ID:", sessionStorage.getItem(CLOUDFLARE_ACCOUNT_ID_STORE) || "");
+          if (!accountId || !accountId.trim()) {
+            res = "CLOUDFLARE ACCOUNT ID NOT PROVIDED.";
+            addMsg(res, "bot");
+            talk(res);
+            return;
+          }
+          sessionStorage.setItem(CLOUDFLARE_ACCOUNT_ID_STORE, accountId.trim());
         }
+
+        selectedProvider = provider;
+        sessionStorage.setItem(PROVIDER_KEY, selectedProvider);
+        setBackend(provider);
         refreshProviderSubLabel();
-        res = `${getProviderLabel(provider)} KEY CLEARED.`;
+        res = `${getProviderLabel(provider)} KEY STORED.`;
+      }
+      addMsg(res, "bot");
+      talk(res);
+      return;
+    }
+  }
+
+  {
+    const clearKeyMatch = low.match(/^clear\s+(groq|gemini|xai|grok|openai|anthropic|claude|openrouter|deepinfra|together|fireworks|cloudflare|youtube)\s+key$/);
+    if (clearKeyMatch) {
+      const provider = normalizeProviderName(clearKeyMatch[1]);
+
+      if (provider === "youtube") {
+        clearYouTubeApiKey();
+        if (activeSlot === 11) renderSystemPanel();
+        res = "YOUTUBE KEY CLEARED.";
         addMsg(res, "bot");
         talk(res);
         return;
       }
-    }
 
-    if (low === "youtube history") {
-      openYoutubeHistoryPanel();
+      clearProviderKey(provider);
+      if (provider === "cloudflare") {
+        sessionStorage.removeItem(CLOUDFLARE_ACCOUNT_ID_STORE);
+      }
+      refreshProviderSubLabel();
+      res = `${getProviderLabel(provider)} KEY CLEARED.`;
+      addMsg(res, "bot");
+      talk(res);
       return;
     }
+  }
 
-    if (low.startsWith("play ")) {
-      if (isOffline) {
-        res = offlineBlocked("media");
-      } else {
-        await openMediaByQuery(val.slice(5).trim(), "video");
-        return;
-      }
-    }
-    else if (low.startsWith("music ")) {
-      if (isOffline) {
-        res = offlineBlocked("media");
-      } else {
-        await openMediaByQuery(val.slice(6).trim(), "music");
-        return;
-      }
-    }
-    else if (low === "stop media" || low === "stop video") {
-      stopMedia(true);
+  if (low === "youtube history") {
+    openYoutubeHistoryPanel();
+    return;
+  }
+
+  if (low.startsWith("yt ")) {
+    if (isOffline) {
+      res = offlineBlocked("media");
+    } else {
+      await openMediaByQuery(val.slice(3).trim(), "video");
       return;
     }
-    else if (low === "close media" || low === "close video" || low === "exit media" || low === "exit video") {
-      closeMedia(true);
+  }
+
+  if (low.startsWith("youtube ")) {
+    if (isOffline) {
+      res = offlineBlocked("media");
+    } else {
+      await openMediaByQuery(val.slice(8).trim(), "video");
       return;
     }
-    else if (low.startsWith("gather ") || shouldAutoGather(val)) {
-      if (isOffline) {
-        res = offlineBlocked("gather");
+  }
+
+  if (low.startsWith("watch ")) {
+    if (isOffline) {
+      res = offlineBlocked("media");
+    } else {
+      await openMediaByQuery(val.slice(6).trim(), "video");
+      return;
+    }
+  }
+
+  if (low.startsWith("play ")) {
+    if (isOffline) {
+      res = offlineBlocked("media");
+    } else {
+      await openMediaByQuery(val.slice(5).trim(), "video");
+      return;
+    }
+  }
+  else if (low.startsWith("music ")) {
+    if (isOffline) {
+      res = offlineBlocked("media");
+    } else {
+      await openMediaByQuery(val.slice(6).trim(), "music");
+      return;
+    }
+  }
+  else if (low === "stop media" || low === "stop video") {
+    stopMedia(true);
+    return;
+  }
+  else if (low === "close media" || low === "close video" || low === "exit media" || low === "exit video") {
+    closeMedia(true);
+    return;
+  }
+  else if (low.startsWith("gather ") || shouldAutoGather(val)) {
+    if (isOffline) {
+      res = offlineBlocked("gather");
+    } else {
+      res = await gatherIntel(low.startsWith("gather ") ? val : `gather ${val}`);
+    }
+  }
+  else if (low.startsWith("map ")) {
+    if (isOffline) {
+      res = offlineBlocked("map");
+    } else {
+      const q = encodeURIComponent(val.substring(4));
+      res = `<b>LOCATION:</b><br><iframe width="100%" height="250" style="border:1px solid var(--halo)" src="https://www.google.com/maps?q=${q}&output=embed" allowfullscreen></iframe>`;
+    }
+  }
+  else if (low.startsWith("route ")) {
+    if (isOffline) {
+      res = offlineBlocked("route");
+    } else {
+      const parts = val.substring(6).split(" to ");
+      if (parts.length === 2) {
+        const start = encodeURIComponent(parts[0].trim());
+        const end = encodeURIComponent(parts[1].trim());
+        res = `<b>ROUTE UPLINK:</b><br><iframe width="100%" height="300" style="border:1px solid var(--halo)" src="https://www.google.com/maps?saddr=${start}&daddr=${end}&output=embed" allowfullscreen></iframe>`;
       } else {
-        res = await gatherIntel(low.startsWith("gather ") ? val : `gather ${val}`);
+        res = "INVALID ROUTE PARAMS. USE: route [start] to [end]";
       }
     }
-    else if (low.startsWith("map ")) {
-      if (isOffline) {
-        res = offlineBlocked("map");
-      } else {
-        const q = encodeURIComponent(val.substring(4));
-        res = `<b>LOCATION:</b><br><iframe width="100%" height="250" style="border:1px solid var(--halo)" src="https://www.google.com/maps?q=${q}&output=embed" allowfullscreen></iframe>`;
-      }
+  }
+  else if (low.startsWith("search ")) {
+    if (isOffline) {
+      res = offlineBlocked("search");
+    } else {
+      const query = val.substring(7);
+      res = `<b>INTEL UPLINK READY:</b><br>Target: ${query.toUpperCase()}<br><button class="uplink-btn" onclick="window.open('https://www.google.com/search?q=${encodeURIComponent(query)}', '_blank')">[ ACCESS GOOGLE DATABASE ]</button>`;
     }
-    else if (low.startsWith("route ")) {
-      if (isOffline) {
-        res = offlineBlocked("route");
-      } else {
-        const parts = val.substring(6).split(" to ");
-        if (parts.length === 2) {
-          const start = encodeURIComponent(parts[0].trim());
-          const end = encodeURIComponent(parts[1].trim());
-          res = `<b>ROUTE UPLINK:</b><br><iframe width="100%" height="300" style="border:1px solid var(--halo)" src="https://www.google.com/maps?saddr=${start}&daddr=${end}&output=embed" allowfullscreen></iframe>`;
-        } else {
-          res = "INVALID ROUTE PARAMS. USE: route [start] to [end]";
-        }
-      }
-    }
-    else if (low.startsWith("search ")) {
-      if (isOffline) {
-        res = offlineBlocked("search");
-      } else {
-        const query = val.substring(7);
-        res = `<b>INTEL UPLINK READY:</b><br>Target: ${query.toUpperCase()}<br><button class="uplink-btn" onclick="window.open('https://www.google.com/search?q=${encodeURIComponent(query)}', '_blank')">[ ACCESS GOOGLE DATABASE ]</button>`;
-      }
-    }
-    else if (low.startsWith("bible ")) {
-      if (isOffline) {
-        res = offlineBlocked("bible uplink");
-      } else {
-        try {
-          const r = await fetch(`https://bible-api.com/${encodeURIComponent(val.substring(6))}`);
-          const d = await r.json();
-          res = d.text ? `<b>${d.reference}</b><br>${d.text}` : "Missing.";
-        } catch {
-          res = "BIBLE UPLINK FAILED.";
-        }
-      }
-    }
-    else if (isOffline) {
-      res = await offlineCommand(val);
-    }
-    else if (/^[0-9+\-*/().\s×÷]+$/.test(val) && /[+\-*/×÷]/.test(val)) {
+  }
+  else if (low.startsWith("bible ")) {
+    if (isOffline) {
+      res = offlineBlocked("bible uplink");
+    } else {
       try {
-        res = `Result: <b>${Function(`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})`)()}</b>`;
+        const r = await fetch(`https://bible-api.com/${encodeURIComponent(val.substring(6))}`);
+        const d = await r.json();
+        res = d.text ? `<b>${d.reference}</b><br>${d.text}` : "Missing.";
       } catch {
-        res = "Error.";
+        res = "BIBLE UPLINK FAILED.";
       }
     }
-    else {
-      if (backendMode !== "web" && backendMode !== "auto") {
-        selectedProvider = backendMode;
-        sessionStorage.setItem(PROVIDER_KEY, selectedProvider);
-      }
+  }
+  else if (isOffline) {
+    res = await offlineCommand(val);
+  }
+  else if (/^[0-9+\-*/().\s×÷]+$/.test(val) && /[+\-*/×÷]/.test(val)) {
+    try {
+      res = `Result: <b>${Function(`"use strict"; return (${val.replace(/×/g, "*").replace(/÷/g, "/")})`)()}</b>`;
+    } catch {
+      res = "Error.";
+    }
+  }
+  else {
+    if (backendMode !== "web" && backendMode !== "auto") {
+      selectedProvider = backendMode;
+      sessionStorage.setItem(PROVIDER_KEY, selectedProvider);
+    }
 
-      if (backendMode !== "web" && backendMode !== "auto" && normalizeProviderName(selectedProvider) !== "ollama" && !providerHasKey(selectedProvider)) {
-        if (!ensureAIProviderReady()) {
-          res = "NO AI PROVIDER READY.";
-        } else {
-          refreshProviderSubLabel();
-          res = await askAnyAI();
-        }
+    if (backendMode !== "web" && backendMode !== "auto" && normalizeProviderName(selectedProvider) !== "ollama" && !providerHasKey(selectedProvider)) {
+      if (!ensureAIProviderReady()) {
+        res = "NO AI PROVIDER READY.";
       } else {
         refreshProviderSubLabel();
         res = await askAnyAI();
       }
-    }
-
-    addMsg(res, "bot");
-    talk(res);
-  }
-
-  function toggleSpectrum() {
-    isOffline = !isOffline;
-    localStorage.setItem("ok_offline", isOffline);
-    location.reload();
-  }
-
-  function addMsg(t, s, saveLog = true) {
-    const d = document.createElement("div");
-    d.className = `msg ${s}`;
-    const v = document.getElementById("visor");
-    v.appendChild(d);
-
-    const hasHTML = /<[^>]+>/.test(t);
-
-    if (s === "bot" && !hasHTML && !minimalMode) {
-      let idx = 0;
-      const safeText = String(t);
-      function type() {
-        if (idx < safeText.length) {
-          d.textContent = safeText.substring(0, idx + 1);
-          idx++;
-          v.scrollTop = v.scrollHeight;
-          setTimeout(type, 10);
-        }
-      }
-      type();
-    } else if (s === "bot" && !hasHTML) {
-      d.textContent = String(t);
-      v.scrollTop = v.scrollHeight;
     } else {
-      d.innerHTML = t;
-      v.scrollTop = v.scrollHeight;
-    }
-
-    if (saveLog) {
-      db[activeSlot].logs.push({ t, s });
-      save();
-    }
-  }
-
-  function save() {
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
-  }
-
-  function loadSlot(id) {
-    activeSlot = id;
-
-    if (id === 11) {
-      document.getElementById("sub-label").innerText = "SYSTEM INFO";
-    } else if (id === 1) {
       refreshProviderSubLabel();
-    } else {
-      document.getElementById("sub-label").innerText = `ARCHIVE [ ${id} ]`;
+      res = await askAnyAI();
     }
+  }
 
-    document.getElementById("visor").innerHTML = '';
+  addMsg(res, "bot");
+  talk(res);
+}
 
-    if (id === 11) {
-      renderSystemPanel();
-    } else {
-      db[activeSlot].logs.forEach(l => addMsg(l.t, l.s, false));
-      if (id === 1 && authenticated) {
-        refreshProviderSubLabel();
+function toggleSpectrum() {
+  isOffline = !isOffline;
+  localStorage.setItem("ok_offline", isOffline);
+  location.reload();
+}
+
+function addMsg(t, s, saveLog = true) {
+  const d = document.createElement("div");
+  d.className = `msg ${s}`;
+  const v = document.getElementById("visor");
+  v.appendChild(d);
+
+  const hasHTML = /<[^>]+>/.test(t);
+
+  if (s === "bot" && !hasHTML && !minimalMode) {
+    let idx = 0;
+    const safeText = String(t);
+    function type() {
+      if (idx < safeText.length) {
+        d.textContent = safeText.substring(0, idx + 1);
+        idx++;
+        v.scrollTop = v.scrollHeight;
+        setTimeout(type, 10);
       }
     }
-
-    if (document.getElementById("menu").style.display === "block") toggleMenu();
+    type();
+  } else if (s === "bot" && !hasHTML) {
+    d.textContent = String(t);
+    v.scrollTop = v.scrollHeight;
+  } else {
+    d.innerHTML = t;
+    v.scrollTop = v.scrollHeight;
   }
 
-  function toggleMenu() {
-    if (!authenticated) {
-      document.body.classList.add("emergency-active");
-      startSiren();
-      return;
-    }
-
-    const m = document.getElementById("menu");
-    m.style.display = m.style.display === "block" ? "none" : "block";
-    if (m.style.display === "block") renderMenu();
-  }
-
-  function renderMenu() {
-    const list = document.getElementById("log-list");
-    list.innerHTML = "";
-
-    for (let i = 1; i <= 11; i++) {
-      const row = document.createElement("div");
-      row.className = "log-row";
-      row.innerHTML = `
-        <div class="log-id" onclick="loadSlot(${i})">${i}</div>
-        <div class="log-name" ${i === 11 ? "" : 'contenteditable="true"'} onblur="rename(${i}, this.innerText)">${db[i].name}</div>
-        ${i !== 11 ? `<button class="wipe-btn" onclick="wipe(${i})">WIPE</button>` : ""}
-      `;
-      list.appendChild(row);
-    }
-  }
-
-  function rename(id, n) {
-    if (id === 11) return;
-    db[id].name = n;
+  if (saveLog) {
+    db[activeSlot].logs.push({ t, s });
     save();
   }
+}
 
-  function wipe(id) {
-    if (id === 11 || !confirm("Purge?")) return;
-    db[id].logs = [];
-    save();
-    renderMenu();
-    loadSlot(id);
+function save() {
+  localStorage.setItem(DB_KEY, JSON.stringify(db));
+}
+
+function loadSlot(id) {
+  activeSlot = id;
+
+  if (id === 11) {
+    document.getElementById("sub-label").innerText = "SYSTEM INFO";
+  } else if (id === 1) {
+    refreshProviderSubLabel();
+  } else {
+    document.getElementById("sub-label").innerText = `ARCHIVE [ ${id} ]`;
   }
 
-  function toggleFullscreen() {
-    if (!authenticated) return;
-    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-    else document.exitFullscreen();
-  }
+  document.getElementById("visor").innerHTML = '';
 
-  const micTrigger = document.getElementById("mic-trigger");
-
-  let micPressTimer = null;
-  let micLongPressFired = false;
-
-  function setupMicButton() {
-    if (!micTrigger) return;
-
-    const startPress = () => {
-      micLongPressFired = false;
-
-      micPressTimer = setTimeout(() => {
-        micLongPressFired = true;
-        stopTalking();
-        addMsg("VOICE OUTPUT HALTED.", "bot");
-      }, 500);
-    };
-
-    const endPress = () => {
-      clearTimeout(micPressTimer);
-    };
-
-    micTrigger.addEventListener("mousedown", startPress);
-    micTrigger.addEventListener("touchstart", startPress, { passive: true });
-
-    micTrigger.addEventListener("mouseup", endPress);
-    micTrigger.addEventListener("mouseleave", endPress);
-    micTrigger.addEventListener("touchend", endPress);
-    micTrigger.addEventListener("touchcancel", endPress);
-
-    micTrigger.addEventListener("click", () => {
-      if (micLongPressFired) return;
-      startMic();
-    });
-  }
-
-  function startMic() {
-    if (!authenticated) return;
-    resumeAudio();
-    pauseVoiceAutoRestart(250);
-    listenAction(false);
-  }
-
-  function listenAction(isAutoRestart = false) {
-    const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Rec) {
-      if (!isAutoRestart) addMsg("MIC/SPEECH RECOGNITION UNAVAILABLE.", "bot");
-      return;
-    }
-
-    if (isListening) return;
-    if (document.body.classList.contains("talking")) return;
-    if (interruptListening) return;
-    if (isAutoRestart && !canAutoRestartVoice()) return;
-
-    clearSpeechRestartTimer();
-
-    const r = new Rec();
-    activeRecognition = r;
-    r.lang = navigator.language || "en-US";
-    r.interimResults = false;
-    r.maxAlternatives = 1;
-    r.continuous = false;
-
-    r.onstart = () => {
-      isListening = true;
-      setListeningVisual(true);
-      document.getElementById("in").placeholder = voiceMode ? "VOICE MODE ACTIVE..." : "LISTENING...";
-      if (!isAutoRestart) playTone(1000, "sine", 0.15);
-    };
-
-    r.onresult = (e) => {
-      const heard = e.results?.[0]?.[0]?.transcript?.trim();
-      if (!heard) return;
-      setListeningVisual(false);
-      document.getElementById("in").value = heard;
-      strike();
-    };
-
-    r.onerror = (e) => {
-      console.error(e);
-      setListeningVisual(false);
-
-      const harmless =
-        e.error === "aborted" ||
-        e.error === "no-speech" ||
-        e.error === "network";
-
-      if (!isAutoRestart && !harmless) {
-        addMsg(`VOICE INPUT FAILED: ${e.error || "UNKNOWN ERROR"}`, "bot");
-      }
-    };
-
-    r.onend = () => {
-      isListening = false;
-      activeRecognition = null;
-      setListeningVisual(false);
-      document.getElementById("in").placeholder = "Query the Domain...";
-      if (voiceMode && authenticated && !document.body.classList.contains("talking")) {
-        scheduleVoiceRelisten(650);
-      }
-    };
-
-    try {
-      r.start();
-    } catch (e) {
-      console.error(e);
-      isListening = false;
-      activeRecognition = null;
-      setListeningVisual(false);
-      if (!isAutoRestart) addMsg("VOICE INPUT FAILED TO START.", "bot");
+  if (id === 11) {
+    renderSystemPanel();
+  } else {
+    db[activeSlot].logs.forEach(l => addMsg(l.t, l.s, false));
+    if (id === 1 && authenticated) {
+      refreshProviderSubLabel();
     }
   }
 
-  window.stopMedia = stopMedia;
-  window.closeMedia = closeMedia;
-  window.toggleMediaFullscreen = toggleMediaFullscreen;
-  window.openMediaByVideoId = openMediaByVideoId;
-  window.openYoutubeHistoryPanel = openYoutubeHistoryPanel;
-  window.setYouTubeApiKey = setYouTubeApiKey;
-  window.clearYouTubeApiKey = clearYouTubeApiKey;
+  if (document.getElementById("menu").style.display === "block") toggleMenu();
+}
+
+function toggleMenu() {
+  if (!authenticated) {
+    document.body.classList.add("emergency-active");
+    startSiren();
+    return;
+  }
+
+  const m = document.getElementById("menu");
+  m.style.display = m.style.display === "block" ? "none" : "block";
+  if (m.style.display === "block") renderMenu();
+}
+
+function renderMenu() {
+  const list = document.getElementById("log-list");
+  list.innerHTML = "";
+
+  for (let i = 1; i <= 11; i++) {
+    const row = document.createElement("div");
+    row.className = "log-row";
+    row.innerHTML = `
+      <div class="log-id" onclick="loadSlot(${i})">${i}</div>
+      <div class="log-name" ${i === 11 ? "" : 'contenteditable="true"'} onblur="rename(${i}, this.innerText)">${db[i].name}</div>
+      ${i !== 11 ? `<button class="wipe-btn" onclick="wipe(${i})">WIPE</button>` : ""}
+    `;
+    list.appendChild(row);
+  }
+}
+
+function rename(id, n) {
+  if (id === 11) return;
+  db[id].name = n;
+  save();
+}
+
+function wipe(id) {
+  if (id === 11 || !confirm("Purge?")) return;
+  db[id].logs = [];
+  save();
+  renderMenu();
+  loadSlot(id);
+}
+
+function toggleFullscreen() {
+  if (!authenticated) return;
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+}
+
+const micTrigger = document.getElementById("mic-trigger");
+
+let micPressTimer = null;
+let micLongPressFired = false;
+
+function setupMicButton() {
+  if (!micTrigger) return;
+
+  const startPress = () => {
+    micLongPressFired = false;
+
+    micPressTimer = setTimeout(() => {
+      micLongPressFired = true;
+      stopTalking();
+      addMsg("VOICE OUTPUT HALTED.", "bot");
+    }, 500);
+  };
+
+  const endPress = () => {
+    clearTimeout(micPressTimer);
+  };
+
+  micTrigger.addEventListener("mousedown", startPress);
+  micTrigger.addEventListener("touchstart", startPress, { passive: true });
+
+  micTrigger.addEventListener("mouseup", endPress);
+  micTrigger.addEventListener("mouseleave", endPress);
+  micTrigger.addEventListener("touchend", endPress);
+  micTrigger.addEventListener("touchcancel", endPress);
+
+  micTrigger.addEventListener("click", () => {
+    if (micLongPressFired) return;
+    startMic();
+  });
+}
+
+function startMic() {
+  if (!authenticated) return;
+  resumeAudio();
+  pauseVoiceAutoRestart(250);
+  listenAction(false);
+}
+
+function listenAction(isAutoRestart = false) {
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Rec) {
+    if (!isAutoRestart) addMsg("MIC/SPEECH RECOGNITION UNAVAILABLE.", "bot");
+    return;
+  }
+
+  if (isListening) return;
+  if (document.body.classList.contains("talking")) return;
+  if (interruptListening) return;
+  if (isAutoRestart && !canAutoRestartVoice()) return;
+
+  clearSpeechRestartTimer();
+
+  const r = new Rec();
+  activeRecognition = r;
+  r.lang = navigator.language || "en-US";
+  r.interimResults = false;
+  r.maxAlternatives = 1;
+  r.continuous = false;
+
+  r.onstart = () => {
+    isListening = true;
+    setListeningVisual(true);
+    document.getElementById("in").placeholder = voiceMode ? "VOICE MODE ACTIVE..." : "LISTENING...";
+    if (!isAutoRestart) playTone(1000, "sine", 0.15);
+  };
+
+  r.onresult = (e) => {
+    const heard = e.results?.[0]?.[0]?.transcript?.trim();
+    if (!heard) return;
+    setListeningVisual(false);
+    document.getElementById("in").value = heard;
+    strike();
+  };
+
+  r.onerror = (e) => {
+    console.error(e);
+    setListeningVisual(false);
+
+    const harmless =
+      e.error === "aborted" ||
+      e.error === "no-speech" ||
+      e.error === "network";
+
+    if (!isAutoRestart && !harmless) {
+      addMsg(`VOICE INPUT FAILED: ${e.error || "UNKNOWN ERROR"}`, "bot");
+    }
+  };
+
+  r.onend = () => {
+    isListening = false;
+    activeRecognition = null;
+    setListeningVisual(false);
+    document.getElementById("in").placeholder = "Query the Domain...";
+    if (voiceMode && authenticated && !document.body.classList.contains("talking")) {
+      scheduleVoiceRelisten(650);
+    }
+  };
+
+  try {
+    r.start();
+  } catch (e) {
+    console.error(e);
+    isListening = false;
+    activeRecognition = null;
+    setListeningVisual(false);
+    if (!isAutoRestart) addMsg("VOICE INPUT FAILED TO START.", "bot");
+  }
+}
+
+window.stopMedia = stopMedia;
+window.closeMedia = closeMedia;
+window.toggleMediaFullscreen = toggleMediaFullscreen;
+window.openMediaByVideoId = openMediaByVideoId;
+window.openYoutubeHistoryPanel = openYoutubeHistoryPanel;
+window.setYouTubeApiKey = setYouTubeApiKey;
+window.clearYouTubeApiKey = clearYouTubeApiKey;
 </script>
 </body>
 </html>
