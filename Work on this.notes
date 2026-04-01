@@ -3156,7 +3156,234 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
     });
     return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
   }
+  function extractYouTubeVideoId(input) {
+    const raw = String(input || "").trim();
+    if (!raw) return "";
 
+    if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) {
+      return raw;
+    }
+
+    try {
+      const url = new URL(raw);
+
+      if (url.hostname.includes("youtu.be")) {
+        const id = url.pathname.replace(/^\/+/, "").split("/")[0];
+        return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
+      }
+
+      if (url.hostname.includes("youtube.com")) {
+        const v = url.searchParams.get("v");
+        if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) {
+          return v;
+        }
+
+        const parts = url.pathname.split("/").filter(Boolean);
+
+        const embedIndex = parts.indexOf("embed");
+        if (embedIndex !== -1 && parts[embedIndex + 1]) {
+          const id = parts[embedIndex + 1];
+          return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
+        }
+
+        const shortsIndex = parts.indexOf("shorts");
+        if (shortsIndex !== -1 && parts[shortsIndex + 1]) {
+          const id = parts[shortsIndex + 1];
+          return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
+        }
+
+        const liveIndex = parts.indexOf("live");
+        if (liveIndex !== -1 && parts[liveIndex + 1]) {
+          const id = parts[liveIndex + 1];
+          return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    return "";
+  }
+
+  function buildYoutubeSearchUrl(query) {
+    return `https://www.youtube.com/results?search_query=${encodeURIComponent(String(query || "").trim())}`;
+  }
+
+  function escapeAttr(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function escapeInlineJS(str) {
+    return String(str || "")
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'");
+  }
+
+  function renderNoApiMediaSearch(query, mode = "video") {
+    openMediaShell();
+
+    const scroll = document.getElementById("media-scroll");
+    if (!scroll) return;
+
+    const finalQuery = String(mode === "music" ? `${query} music` : query).trim();
+    const searchUrl = buildYoutubeSearchUrl(finalQuery);
+
+    mediaState.open = true;
+    mediaState.query = query;
+    mediaState.mode = mode;
+    mediaState.videoId = "";
+    mediaState.title = finalQuery;
+    mediaState.url = searchUrl;
+    mediaState.apiEnabled = false;
+
+    scroll.innerHTML = `
+      <div class="media-card">
+        <b>YOUTUBE SEARCH MODE</b><br><br>
+        API KEY: NOT SET<br>
+        QUERY: ${escapeAttr(finalQuery)}<br><br>
+        DIRECT EMBED SEARCH IS NOT RELIABLE WITHOUT API.<br>
+        USE THE SEARCH UPLINK BELOW.
+      </div>
+      <div class="media-card">
+        <button class="uplink-btn" onclick="window.open('${searchUrl}', '_blank')">OPEN YOUTUBE SEARCH</button>
+      </div>
+    `;
+
+    setMediaStatus(`MEDIA SEARCH: ${finalQuery.toUpperCase()}`);
+  }
+
+  function renderMediaResults(results, mode) {
+    openMediaShell();
+    const scroll = document.getElementById("media-scroll");
+    if (!scroll) return;
+
+    if (!results || !results.length) {
+      scroll.innerHTML = `<div class="media-card">NO MEDIA RESULTS FOUND.</div>`;
+      setMediaStatus("MEDIA SEARCH FAILED");
+      return;
+    }
+
+    scroll.innerHTML = `
+      <div class="media-card">SELECT TARGET. MODE: ${(mode || "video").toUpperCase()}</div>
+      <div class="media-grid">
+        ${results.map(result => `
+          <div class="media-result" onclick="openMediaByVideoId('${escapeInlineJS(result.videoId)}', '${escapeInlineJS(result.title || "")}', '${escapeInlineJS(mode || "video")}')">
+            <img class="media-thumb" src="${escapeAttr(result.thumb || "")}" alt="">
+            <div class="media-result-title">${escapeAttr(result.title || "UNTITLED")}</div>
+            <div class="media-result-meta">${escapeAttr(result.channel || "UNKNOWN CHANNEL")}${result.meta ? `<br>${escapeAttr(result.meta)}` : ""}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    setMediaStatus(`MEDIA RESULTS: ${results.length}`);
+  }
+
+  async function searchYouTube(query, mode = "video") {
+    const cleanQuery = String(query || "").trim();
+    if (!cleanQuery) return [];
+
+    const apiKey = getYouTubeApiKey();
+    mediaState.apiEnabled = !!apiKey;
+
+    if (apiKey) {
+      try {
+        const finalQuery = mode === "music" ? `${cleanQuery} music audio` : cleanQuery;
+        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&q=${encodeURIComponent(finalQuery)}&key=${encodeURIComponent(apiKey)}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (response.ok && Array.isArray(data.items)) {
+          return data.items
+            .map(item => ({
+              videoId: item?.id?.videoId,
+              title: item?.snippet?.title || "UNTITLED",
+              channel: item?.snippet?.channelTitle || "UNKNOWN CHANNEL",
+              meta: item?.snippet?.publishedAt ? new Date(item.snippet.publishedAt).toLocaleDateString() : "",
+              thumb: item?.snippet?.thumbnails?.medium?.url || item?.snippet?.thumbnails?.default?.url || ""
+            }))
+            .filter(item => item.videoId);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    return [];
+  }
+
+  async function openMediaByQuery(query, mode = "video") {
+    const cleanQuery = String(query || "").trim();
+    if (!cleanQuery) {
+      addMsg("MEDIA QUERY EMPTY.", "bot");
+      return;
+    }
+
+    mediaState.query = cleanQuery;
+    mediaState.mode = mode;
+    openMediaShell();
+    setMediaStatus(`SEARCHING: ${cleanQuery.toUpperCase()}`);
+
+    const directVideoId = extractYouTubeVideoId(cleanQuery);
+
+    if (directVideoId) {
+      openMediaByVideoId(directVideoId, cleanQuery, mode);
+      return;
+    }
+
+    const apiKey = getYouTubeApiKey();
+    mediaState.apiEnabled = !!apiKey;
+
+    if (!apiKey) {
+      renderNoApiMediaSearch(cleanQuery, mode);
+      addMsg(`MEDIA SEARCH OPENED: ${cleanQuery.toUpperCase()}`, "bot");
+      talk(`Opening ${mode === "music" ? "music" : "video"} search.`);
+      return;
+    }
+
+    const results = await searchYouTube(cleanQuery, mode);
+
+    if (!results.length) {
+      renderNoApiMediaSearch(cleanQuery, mode);
+      addMsg(`NO API RESULTS. OPENING SEARCH UPLINK: ${cleanQuery.toUpperCase()}`, "bot");
+      talk("No direct results. Opening search uplink.");
+      return;
+    }
+
+    renderMediaResults(results, mode);
+    addMsg(`MEDIA RESULTS READY: ${cleanQuery.toUpperCase()}`, "bot");
+    talk("Media results ready.");
+  }
+
+  function openMediaByVideoId(videoId, title = "", mode = "video") {
+    const raw = String(videoId || "").trim();
+    if (!raw) {
+      addMsg("INVALID VIDEO TARGET.", "bot");
+      return;
+    }
+
+    const cleanId = extractYouTubeVideoId(raw) || (/^[a-zA-Z0-9_-]{11}$/.test(raw) ? raw : "");
+
+    if (!cleanId) {
+      openMediaByQuery(raw, mode);
+      return;
+    }
+
+    mediaState.query = mediaState.query || title || "";
+    mediaState.mode = mode;
+    renderMediaFrame(cleanId, title || "YOUTUBE TARGET", mode);
+    pushYoutubeHistory({
+      videoId: cleanId,
+      title: title || "YOUTUBE TARGET",
+      mode,
+      query: mediaState.query || title || ""
+    });
+    addMsg(`MEDIA LINKED: ${(title || "YOUTUBE TARGET").toUpperCase()}`, "bot");
+    talk(`Opening ${title || "media target"}.`);
+  }
   function renderMediaFrame(videoId, title, mode) {
     openMediaShell();
     const scroll = document.getElementById("media-scroll");
