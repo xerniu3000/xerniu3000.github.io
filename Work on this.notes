@@ -3255,32 +3255,6 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
     setMediaStatus(`MEDIA SEARCH: ${finalQuery.toUpperCase()}`);
   }
 
-  function renderMediaResults(results, mode) {
-    openMediaShell();
-    const scroll = document.getElementById("media-scroll");
-    if (!scroll) return;
-
-    if (!results || !results.length) {
-      scroll.innerHTML = `<div class="media-card">NO MEDIA RESULTS FOUND.</div>`;
-      setMediaStatus("MEDIA SEARCH FAILED");
-      return;
-    }
-
-    scroll.innerHTML = `
-      <div class="media-card">SELECT TARGET. MODE: ${(mode || "video").toUpperCase()}</div>
-      <div class="media-grid">
-        ${results.map(result => `
-          <div class="media-result" onclick="openMediaByVideoId('${escapeInlineJS(result.videoId)}', '${escapeInlineJS(result.title || "")}', '${escapeInlineJS(mode || "video")}')">
-            <img class="media-thumb" src="${escapeAttr(result.thumb || "")}" alt="">
-            <div class="media-result-title">${escapeAttr(result.title || "UNTITLED")}</div>
-            <div class="media-result-meta">${escapeAttr(result.channel || "UNKNOWN CHANNEL")}${result.meta ? `<br>${escapeAttr(result.meta)}` : ""}</div>
-          </div>
-        `).join("")}
-      </div>
-    `;
-    setMediaStatus(`MEDIA RESULTS: ${results.length}`);
-  }
-
   async function searchYouTube(query, mode = "video") {
     const cleanQuery = String(query || "").trim();
     if (!cleanQuery) return [];
