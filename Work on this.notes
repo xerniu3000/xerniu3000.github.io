@@ -8,7 +8,6 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="OKATAN" />
-
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="32x32" href="okatan-icon-192.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="okatan-icon-192.png" />
@@ -3352,74 +3351,6 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
       talk("No direct results. Opening search uplink.");
       return;
     }
-
-    renderMediaResults(results, mode);
-    addMsg(`MEDIA RESULTS READY: ${cleanQuery.toUpperCase()}`, "bot");
-    talk("Media results ready.");
-  }
-
-  function openMediaByVideoId(videoId, title = "", mode = "video") {
-    const raw = String(videoId || "").trim();
-    if (!raw) {
-      addMsg("INVALID VIDEO TARGET.", "bot");
-      return;
-    }
-
-    const cleanId = extractYouTubeVideoId(raw) || (/^[a-zA-Z0-9_-]{11}$/.test(raw) ? raw : "");
-
-    if (!cleanId) {
-      openMediaByQuery(raw, mode);
-      return;
-    }
-
-    mediaState.query = mediaState.query || title || "";
-    mediaState.mode = mode;
-    renderMediaFrame(cleanId, title || "YOUTUBE TARGET", mode);
-    pushYoutubeHistory({
-      videoId: cleanId,
-      title: title || "YOUTUBE TARGET",
-      mode,
-      query: mediaState.query || title || ""
-    });
-    addMsg(`MEDIA LINKED: ${(title || "YOUTUBE TARGET").toUpperCase()}`, "bot");
-    talk(`Opening ${title || "media target"}.`);
-  }
-  function renderMediaFrame(videoId, title, mode) {
-    openMediaShell();
-    const scroll = document.getElementById("media-scroll");
-    if (!scroll) return;
-
-    const embedUrl = buildYoutubeEmbedUrl(videoId, true);
-    mediaState.videoId = videoId;
-    mediaState.title = title || "UNTITLED";
-    mediaState.mode = mode || "video";
-    mediaState.url = embedUrl;
-
-    scroll.innerHTML = `
-      <div class="media-card">
-        <b>${mediaState.title}</b><br>
-        MODE: ${(mediaState.mode || "video").toUpperCase()}
-      </div>
-      <div class="media-frame-wrap">
-        <iframe
-          class="media-frame"
-          src="${embedUrl}"
-          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-          allowfullscreen
-          referrerpolicy="strict-origin-when-cross-origin"
-        ></iframe>
-      </div>
-      <div class="media-card">
-        USE: stop media, close media, exit media, youtube history.
-      </div>
-    `;
-
-    setMediaStatus(`MEDIA ACTIVE: ${mediaState.title}`);
-  }
-    renderMediaResults(results, mode);
-    addMsg(`MEDIA RESULTS READY: ${cleanQuery.toUpperCase()}`, "bot");
-    talk("Media results ready.");
-  }
 
   function openMediaByVideoId(videoId, title = "", mode = "video") {
     const cleanId = String(videoId || "").trim();
