@@ -2892,13 +2892,19 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
         if (!transcript) continue;
 
         if (isStopCommand(transcript)) {
-          stopTalking();
-          if (normalizeInterruptPhrase(transcript) === "stop media" || normalizeInterruptPhrase(transcript) === "stop video") {
-            stopMedia(true);
-          }
-          pauseVoiceAutoRestart(700);
-          return;
-        }
+  const heard = normalizeInterruptPhrase(transcript);
+  stopTalking();
+
+  if (heard === "stop media" || heard === "stop video") {
+    stopMedia(true);
+  }
+
+  if (voiceMode && authenticated) {
+    scheduleVoiceRelisten(700);
+  }
+
+  return;
+}
 
         if (isWakeInterrupt(transcript)) {
   const followup = stripWakePhrase(transcript);
