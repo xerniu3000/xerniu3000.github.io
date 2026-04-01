@@ -2901,21 +2901,25 @@ PROVIDERS:<br>${getProviderMatrixHTML()}`;
         }
 
         if (isWakeInterrupt(transcript)) {
-          const followup = stripWakePhrase(transcript);
-          stopTalking();
-          pauseVoiceAutoRestart(700);
+  const followup = stripWakePhrase(transcript);
+  stopTalking();
 
-          setTimeout(() => {
-            if (followup) {
-              document.getElementById("in").value = followup;
-              strike();
-            } else {
-              listenAction(false);
-            }
-          }, 120);
+  setTimeout(() => {
+    if (followup) {
+      document.getElementById("in").value = followup;
+      strike();
+    } else {
+      listenAction(false);
 
-          return;
-        }
+      // if nothing follows, keep voice mode alive instead of letting it die
+      if (voiceMode && authenticated) {
+        scheduleVoiceRelisten(1200);
+      }
+    }
+  }, 120);
+
+  return;
+}
       }
     };
 
