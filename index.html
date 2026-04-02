@@ -4772,6 +4772,7 @@ clear api all`;
   }
 
   function toggleSpectrum() {
+    closeMedia(false);
     isOffline = !isOffline;
     localStorage.setItem("ok_offline", isOffline);
     location.reload();
