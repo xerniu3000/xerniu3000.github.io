@@ -5053,18 +5053,33 @@ window.addEventListener("offline", () => {
   addMsg("NETWORK LOST. SWITCHING TO OFFLINE MODE.", "bot");
   try { talk("Network lost. Switching to offline mode."); } catch (e) { console.error(e); }
 });
-  document.addEventListener("touchstart", function(e) {
-  if (!navigator.onLine) {
-    const iframe = e.target.closest("iframe");
+  document.addEventListener("click", function (e) {
+  if (navigator.onLine) return;
 
-    if (iframe) {
-      e.preventDefault();
-      e.stopPropagation();
+  const blockedTarget = e.target.closest("a, iframe");
+  if (!blockedTarget) return;
 
-      addMsg("MAP OFFLINE. INTERNET REQUIRED.", "bot");
-      return false;
-    }
-  }
+  e.preventDefault();
+  e.stopPropagation();
+
+  addMsg("OFFLINE. INTERNET FEATURES DISABLED.", "bot");
+  try { talk("Offline. Internet features are disabled."); } catch {}
+
+  return false;
+}, true);
+
+document.addEventListener("touchstart", function (e) {
+  if (navigator.onLine) return;
+
+  const blockedTarget = e.target.closest("a, iframe");
+  if (!blockedTarget) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  addMsg("OFFLINE. INTERNET FEATURES DISABLED.", "bot");
+
+  return false;
 }, true);
 </script>
 </body>
