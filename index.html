@@ -5041,6 +5041,9 @@ clear api all`;
     if (!navigator.onLine) location.reload();
   }, 300);
 });
+ window.addEventListener("online", () => {
+  addMsg("NETWORK RESTORED. ONLINE MODE AVAILABLE.", "bot");
+}); 
 </script>
 </body>
 </html>
