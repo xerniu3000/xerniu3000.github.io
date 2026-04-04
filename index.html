@@ -4347,10 +4347,14 @@ clear api all`;
     if (!isOffline && !navigator.onLine) {
   isOffline = true;
   localStorage.setItem("ok_offline", "true");
+
+  closeMedia(false);
+
   addMsg("NETWORK LOST. SWITCHING TO OFFLINE MODE.", "bot");
-  setTimeout(() => location.reload(), 200);
+  try { talk("Network lost. Switching to offline mode."); } catch {}
+
   return;
-    }
+}
 
     if (low === "download mlc apk") {
       downloadAPK();
