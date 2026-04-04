@@ -5042,19 +5042,14 @@ window.addEventListener("offline", () => {
   isOffline = true;
   localStorage.setItem("ok_offline", "true");
 
-  closeMedia(false);
+  try { closeMedia(false); } catch (e) { console.error(e); }
 
-  addMsg("NETWORK LOST. SWITCHING TO OFFLINE MODE.", "bot");
-  try { talk("Network lost. Switching to offline mode."); } catch {}
-
-  setTimeout(() => {
-    if (!navigator.onLine) location.reload();
-  }, 300);
+  location.reload();
 });
 
 window.addEventListener("online", () => {
   addMsg("NETWORK RESTORED. ONLINE MODE AVAILABLE.", "bot");
-}); 
+});
 </script>
 </body>
 </html>
