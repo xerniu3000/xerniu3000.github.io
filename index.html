@@ -5034,7 +5034,9 @@ clear api all`;
   window.openYoutubeHistoryPanel = openYoutubeHistoryPanel;
   window.setYouTubeApiKey = setYouTubeApiKey;
   window.clearYouTubeApiKey = clearYouTubeApiKey;
-  window.addEventListener("offline", () => {
+window.addEventListener("offline", () => {
+  alert("OFFLINE EVENT FIRED");
+
   if (isOffline) return;
 
   isOffline = true;
@@ -5049,7 +5051,8 @@ clear api all`;
     if (!navigator.onLine) location.reload();
   }, 300);
 });
- window.addEventListener("online", () => {
+
+window.addEventListener("online", () => {
   addMsg("NETWORK RESTORED. ONLINE MODE AVAILABLE.", "bot");
 }); 
 </script>
