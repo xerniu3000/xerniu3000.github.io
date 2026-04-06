@@ -1,4 +1,4 @@
-const CACHE_NAME = 'okatan-v84-cache';
+const CACHE_NAME = 'okatan-v85-cache';
 const ASSETS = [
   'loading.html',
   'index.html',
